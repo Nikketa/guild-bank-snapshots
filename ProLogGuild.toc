@@ -1,0 +1,8 @@
+## Interface: 60000
+## Title: ProLog Guild
+## Notes: Guild bank logger and analyzer.
+## Author: Niketa-Moonrunner (US)
+## Version: @project-version@
+## SavedVariables: ProLogGuildDB
+
+Core.lua
