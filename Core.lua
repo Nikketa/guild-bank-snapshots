@@ -541,7 +541,7 @@ events:HookScript("OnEvent", function(self, event, ...)
     		for i = 1, num_transactions do
     			log_table.transactions["Tab " .. query_counter][(num_transactions + 1) - i] = {GetGuildBankTransaction(query_counter, i)}
     		end
-    		``
+    		
     		QueryGuildBankLog(query_counter)
     	end
     end
