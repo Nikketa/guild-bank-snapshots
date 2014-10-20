@@ -1,3 +1,5 @@
+-- ADD COMPATIBILITY WITH BAGNON: CHECK IF BAGNON IS LOADED AND IF SO, SET THE BUTTON UP ON ITS INTERFACE, DO NOT MANUALLY LOAD GBANK AT START.
+
 local addon, ns = ...
 local addon_prefix = "|cff00ff00Pro-Log Guild: |r"
 
@@ -35,7 +37,11 @@ local events = CreateFrame("Frame", "ProLogGuildFrame", UIParent)
 
 -- -- -- -- -- EVENT FUNCTIONS: ADDON_LOADED -- -- -- -- --
 function events:ADDON_LOADED(event, addon)
-	if addon == "ProLogGuild" then
+	local has_bagnon = false
+
+	if addon == "Bagnon_GuildBank" then
+		events:RegisterEvent("GUILDBANKBAGSLOTS_CHANGED")
+	elseif addon == "ProLogGuild" then
 		ProLogGuildDB = ProLogGuildDB or {
 			Settings = {},
 			Transactions = {},
@@ -51,8 +57,6 @@ function events:ADDON_LOADED(event, addon)
 		db.Active["guild"] = db.Active["guild"] or false
 		db.Active["log"] = db.Active["log"] or false
 		db.Active["tab"] = db.Active["tab"] or false
-
-		if not IsAddOnLoaded("Blizzard_GuildBankUI") then LoadAddOn("Blizzard_GuildBankUI") end
 
 		print(addon_prefix .. L["Use the command \"/plg\" to open the review window."])
 	elseif addon == "Blizzard_GuildBankUI" then
@@ -70,6 +74,24 @@ function events:ADDON_LOADED(event, addon)
 			  end)
 			  ns.scan_btn = scan_btn
 	end
+end
+
+function events:GUILDBANKBAGSLOTS_CHANGED(...)
+	local scan_btn = CreateFrame("Button", "scan_btn", BagnonFrameguildbank.brokerDisplay or BagnonFrameguildbank, "UIPanelButtonTemplate")
+		  scan_btn:SetSize(100, 21)
+		  scan_btn:SetToplevel(true)
+		  scan_btn:SetText(L["Scan Bank"])
+		  scan_btn:SetPoint("CENTER", BagnonFrameguildbank, "BOTTOM", 0, 17)
+		  scan_btn:SetScript("OnClick", function()
+		  		if not loaded then
+		  			events:CreateDisplay()
+		  			events:Hide()
+		  		end
+		  		events:ScanLogs()
+		  end)
+		  ns.scan_btn = scan_btn
+
+	events:UnregisterEvent("GUILDBANKBAGSLOTS_CHANGED")
 end
 
 -- -- -- -- -- FUNCTIONS: PAIRS BY KEYS -- -- -- -- --
@@ -466,13 +488,11 @@ function events:ClearHelpElements()
 	end
 end
 
+local first_scan = true
+
 -- -- -- -- -- FUNCTIONS: SCAN LOGS -- -- -- -- --
 function events:ScanLogs()
 	local self = events
-
-	for i = 1, MAX_GUILDBANK_TABS do
-		QueryGuildBankLog(i)
-	end
 
 	print(addon_prefix .. L["Beginning scan. Do not leave the bank until finished."])
 
@@ -495,7 +515,14 @@ function events:ScanLogs()
 
 	log_table = db.Transactions[guild][date_str]
 
-	QueryGuildBankLog(1)
+	for x = 1, 100 do
+		for i = 1, MAX_GUILDBANK_TABS do
+			-- GuildBankFrameTab2:Click()
+			SetCurrentGuildBankTab(i)
+			QueryGuildBankLog(i)
+		end
+	end
+
 	QueryGuildBankLog(MAX_GUILDBANK_TABS + 1)
 end
 
@@ -533,6 +560,8 @@ events:HookScript("OnEvent", function(self, event, ...)
 			log_dropdown:SetValue(date_str)
 
 			events:Show()
+
+			first_scan = nil
     	elseif query_counter <= max_tabs then
     		local num_transactions = GetNumGuildBankTransactions(query_counter)
     		
@@ -567,6 +596,23 @@ function events:RefreshButtons()
 		copy_btn:Enable()
 	end
 end
+
+-- -- -- -- -- BLIZZ CONSTANTS (ENGLISH)... IN CASE THEY ARE NOT AVAILABLE DUE TO NOT LOADING WITH BAGNON -- -- -- -- --
+GUILDBANK_MOVE_FORMAT = GUILDBANK_MOVE_FORMAT or "%s moved %s x %d from %s to %s"
+GUILD_BANK_LOG_TIME_PREPEND = GUILD_BANK_LOG_TIME_PREPEND or "|cff009999   "
+GUILD_BANK_LOG_TIME = GUILD_BANK_LOG_TIME or "( %s ago )"
+NORMAL_FONT_COLOR_CODE = NORMAL_FONT_COLOR_CODE or "|cffffd200"
+UNKNOWN = UNKNOWN or "Unknown"
+GUILDBANK_DEPOSIT_MONEY_FORMAT = GUILDBANK_DEPOSIT_MONEY_FORMAT or "%s deposited %s"
+GUILDBANK_WITHDRAW_MONEY_FORMAT = GUILDBANK_WITHDRAW_MONEY_FORMAT or "%s |cffff2020withdrew|r %s"
+GUILDBANK_REPAIR_MONEY_FORMAT = GUILDBANK_REPAIR_MONEY_FORMAT or "%s withdrew %s for repairs"
+GUILDBANK_WITHDRAWFORTAB_MONEY_FORMAT = GUILDBANK_WITHDRAWFORTAB_MONEY_FORMAT or "%s withdrew %s to purchase a guild bank tab"
+GUILDBANK_BUYTAB_MONEY_FORMAT = GUILDBANK_BUYTAB_MONEY_FORMAT or "%s purchased a guild bank tab for %s"
+GUILDBANK_UNLOCKTAB_FORMAT = GUILDBANK_UNLOCKTAB_FORMAT or "%s unlocked a guild bank tab with a Guild Vault Voucher."
+GUILDBANK_AWARD_MONEY_SUMMARY_FORMAT = GUILDBANK_AWARD_MONEY_SUMMARY_FORMAT or "A total of %s was deposited last week from Guild Perk: Cash Flow "
+GUILDBANK_DEPOSIT_FORMAT = GUILDBANK_DEPOSIT_FORMAT or "%s deposited %s"
+GUILDBANK_LOG_QUANTITY = GUILDBANK_LOG_QUANTITY or " x %d"
+GUILDBANK_WITHDRAW_FORMAT = GUILDBANK_WITHDRAW_FORMAT or "%s |cffff2020withdrew|r %s"
 
 -- -- -- -- -- FUNCTIONS: FORMAT LOG -- -- -- -- --
 function events:FormatLogMsg(log, log_type, copy)
@@ -630,7 +676,7 @@ function events:FormatLogMsg(log, log_type, copy)
 				msg = msg .. format(GUILDBANK_LOG_QUANTITY, count)
 			end
 		elseif type == "move" then
-			msg = format(GUILDBANK_MOVE_FORMAT, name, itemLink, count, GetGuildBankTabInfo(tab1), GetGuildBankTabInfo(tab2))
+			msg = format(GUILDBANK_MOVE_FORMAT, name, itemLink, count, "tab " .. tab1, "tab " .. tab2)
 		end
 
 		msg = msg .. GUILD_BANK_LOG_TIME_PREPEND .. format(GUILD_BANK_LOG_TIME, RecentTimeDate(year, month, day, hour))
@@ -850,7 +896,13 @@ StaticPopupDialogs["PLG_DeleteConfirmation"] = {
 
 -- -- -- -- -- STATIC POPUPS: SCAN STATUS -- -- -- -- --
 StaticPopupDialogs["PLG_Scanning"] = {
-  text = L["Scanning bank. Please wait..."],
+  text = L["Scanning bank. Please wait... (If this process is taking too long, you can try the following: cancel and scan again, click through some of the bank logs to expedite the process, or reload your UI.)"],
+  button2 = "Cancel",
+  OnCancel = function()
+    events:UnregisterEvent("GUILDBANKLOG_UPDATE")
+	first_scan = nil
+	ns.scan_btn:Enable()
+  end,
   whileDead = true,
   hideOnEscape = false
 }
