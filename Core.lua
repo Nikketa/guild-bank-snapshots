@@ -515,12 +515,10 @@ function events:ScanLogs()
 
 	log_table = db.Transactions[guild][date_str]
 
-	for x = 1, 100 do
-		for i = 1, MAX_GUILDBANK_TABS do
-			-- GuildBankFrameTab2:Click()
-			SetCurrentGuildBankTab(i)
-			QueryGuildBankLog(i)
-		end
+	for i = 1, MAX_GUILDBANK_TABS do
+		-- GuildBankFrameTab2:Click()
+		SetCurrentGuildBankTab(i)
+		QueryGuildBankLog(i)
 	end
 
 	QueryGuildBankLog(MAX_GUILDBANK_TABS + 1)
@@ -896,7 +894,7 @@ StaticPopupDialogs["PLG_DeleteConfirmation"] = {
 
 -- -- -- -- -- STATIC POPUPS: SCAN STATUS -- -- -- -- --
 StaticPopupDialogs["PLG_Scanning"] = {
-  text = L["Scanning bank. Please wait... (If this process is taking too long, you can try the following: cancel and scan again, click through some of the bank logs to expedite the process, or reload your UI.)"],
+  text = L["Scanning bank. Please wait... (If this process is taking too long - 15+ sec, you can try the following: cancel and scan again, click through some of the bank logs to expedite the process, or reload your UI.)"],
   button2 = "Cancel",
   OnCancel = function()
     events:UnregisterEvent("GUILDBANKLOG_UPDATE")
