@@ -470,6 +470,10 @@ end
 function events:ScanLogs()
 	local self = events
 
+	for i = 1, MAX_GUILDBANK_TABS do
+		QueryGuildBankLog(i)
+	end
+
 	print(addon_prefix .. L["Beginning scan. Do not leave the bank until finished."])
 
 	ns.scan_btn:Disable()
@@ -537,7 +541,7 @@ events:HookScript("OnEvent", function(self, event, ...)
     		for i = 1, num_transactions do
     			log_table.transactions["Tab " .. query_counter][(num_transactions + 1) - i] = {GetGuildBankTransaction(query_counter, i)}
     		end
-
+    		``
     		QueryGuildBankLog(query_counter)
     	end
     end
