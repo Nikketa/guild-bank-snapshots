@@ -818,15 +818,29 @@ function events:CopyText()
 				  	}
 			  })
 
-		events.copy_editbox = CreateFrame("ScrollFrame", "copy_editbox", frame, "InputScrollFrameTemplate")
+		events.copy_scrollframe = CreateFrame("ScrollFrame", "copy_scrollframe", frame, "UIPanelScrollFrameTemplate")
+		local copy_scrollframe = events.copy_scrollframe
+		copy_scrollframe:SetSize(375, 250)
+		copy_scrollframe:SetPoint("TOP", 0, -30)
+	    copy_scrollframe.ScrollBar:EnableMouseWheel(true)
+	    copy_scrollframe.ScrollBar:SetScript("OnMouseWheel", function(self, direction)
+	        ScrollFrameTemplate_OnMouseWheel(copy_scrollframe, direction)
+	    end)
+
+		local ScrollContent = CreateFrame("Frame", nil, copy_scrollframe)
+		ScrollContent:SetSize(copy_scrollframe:GetWidth(), copy_scrollframe:GetHeight())
+
+		copy_scrollframe.ScrollContent = ScrollContent
+		copy_scrollframe:SetScrollChild(ScrollContent)
+
+		events.copy_editbox = CreateFrame("Editbox", "copy_editbox", ScrollContent)
 		local copy_editbox = events.copy_editbox
-			  copy_editbox:SetSize(375, 250)
-			  copy_editbox:SetPoint("TOP", 0, -30)
-			  copy_editbox.EditBox:SetFontObject(GameFontHighlightSmall)
-			  copy_editbox.EditBox:SetAutoFocus(true)
-			  copy_editbox.EditBox:SetMultiLine(true)
-			  copy_editbox.EditBox:SetMaxLetters(9000)
-			  copy_editbox.EditBox:SetScript("OnEscapePressed", function(this)
+			  copy_editbox:SetAllPoints(ScrollContent)
+			  copy_editbox:SetFontObject(GameFontHighlightSmall)
+			  copy_editbox:SetAutoFocus(true)
+			  copy_editbox:SetMultiLine(true)
+			  copy_editbox:SetMaxLetters(9000)
+			  copy_editbox:SetScript("OnEscapePressed", function(this)
 				  this:SetText("")
 				  this:ClearFocus()
 				  events.copy_frame:Hide()
@@ -835,15 +849,15 @@ function events:CopyText()
 		local copy_close = CreateFrame("Button", "copy_close", frame, "UIPanelButtonTemplate")
 			  copy_close:SetSize(150, 25)
 			  copy_close:SetText(L["Close"])
-			  copy_close:SetPoint("TOP", copy_editbox, "BOTTOM", 0, -15)
+			  copy_close:SetPoint("TOP", copy_scrollframe, "BOTTOM", 0, -15)
 			  copy_close:SetScript("OnClick", function(self)
 			  		events.copy_frame:Hide()
 			  end)
 	end
 
-	events.copy_editbox.EditBox:SetText(msg)
-	events.copy_editbox.EditBox:SetFocus()
-	events.copy_editbox.EditBox:HighlightText()
+	events.copy_editbox:SetText(msg)
+	events.copy_editbox:SetFocus()
+	events.copy_editbox:HighlightText()
 	events.copy_frame:Show()
 end
 
