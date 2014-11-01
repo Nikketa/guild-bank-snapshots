@@ -94,6 +94,23 @@ function events:GUILDBANKBAGSLOTS_CHANGED(...)
 	events:UnregisterEvent("GUILDBANKBAGSLOTS_CHANGED")
 end
 
+-- -- -- -- -- BLIZZ CONSTANTS (ENGLISH)... IN CASE THEY ARE NOT AVAILABLE DUE TO NOT LOADING WITH BAGNON -- -- -- -- --
+GUILDBANK_MOVE_FORMAT = GUILDBANK_MOVE_FORMAT or "%s moved %s x %d from %s to %s"
+GUILD_BANK_LOG_TIME_PREPEND = GUILD_BANK_LOG_TIME_PREPEND or "|cff009999   "
+GUILD_BANK_LOG_TIME = GUILD_BANK_LOG_TIME or "( %s ago )"
+NORMAL_FONT_COLOR_CODE = NORMAL_FONT_COLOR_CODE or "|cffffd200"
+UNKNOWN = UNKNOWN or "Unknown"
+GUILDBANK_DEPOSIT_MONEY_FORMAT = GUILDBANK_DEPOSIT_MONEY_FORMAT or "%s deposited %s"
+GUILDBANK_WITHDRAW_MONEY_FORMAT = GUILDBANK_WITHDRAW_MONEY_FORMAT or "%s |cffff2020withdrew|r %s"
+GUILDBANK_REPAIR_MONEY_FORMAT = GUILDBANK_REPAIR_MONEY_FORMAT or "%s withdrew %s for repairs"
+GUILDBANK_WITHDRAWFORTAB_MONEY_FORMAT = GUILDBANK_WITHDRAWFORTAB_MONEY_FORMAT or "%s withdrew %s to purchase a guild bank tab"
+GUILDBANK_BUYTAB_MONEY_FORMAT = GUILDBANK_BUYTAB_MONEY_FORMAT or "%s purchased a guild bank tab for %s"
+GUILDBANK_UNLOCKTAB_FORMAT = GUILDBANK_UNLOCKTAB_FORMAT or "%s unlocked a guild bank tab with a Guild Vault Voucher."
+GUILDBANK_AWARD_MONEY_SUMMARY_FORMAT = GUILDBANK_AWARD_MONEY_SUMMARY_FORMAT or "A total of %s was deposited last week from Guild Perk: Cash Flow "
+GUILDBANK_DEPOSIT_FORMAT = GUILDBANK_DEPOSIT_FORMAT or "%s deposited %s"
+GUILDBANK_LOG_QUANTITY = GUILDBANK_LOG_QUANTITY or " x %d"
+GUILDBANK_WITHDRAW_FORMAT = GUILDBANK_WITHDRAW_FORMAT or "%s |cffff2020withdrew|r %s"
+
 -- -- -- -- -- FUNCTIONS: PAIRS BY KEYS -- -- -- -- --
 events.pairsByKeys = function(_, t, f)
 	local a = {}
@@ -191,11 +208,63 @@ function events:CreateDisplay()
 		  end)
 		  if events:CountLogs() == 0 or not db.Active.log then delete_btn:Disable() end
 	
+	local log_lines = {}
 	local export_btn = CreateFrame("Button", "export_btn", self, "UIPanelButtonTemplate")
 		  export_btn:SetSize(80, 22)
 		  export_btn:SetText(L["Export"])
 		  export_btn:SetPoint("RIGHT", delete_btn, "LEFT", 0, 0)
-		  export_btn:Disable() -- Until I create the button script...
+		  export_btn:SetScript("OnClick", function()
+		  		local active_page = db.Active.page
+				local active_log = db.Transactions[db.Active.guild][db.Active.log][active_page == "transactions_tab" and "transactions" or "money_transactions"]
+				
+				table.wipe(log_lines)
+
+				for k, v in pairs(active_page == "transactions_tab" and active_log["Tab " .. db.Active.tab] or active_log) do
+					if active_page == "transactions_tab" then
+						log_lines[1] = "type,name,itemLink,count,tab1,tab2,year,month,day,hour,line"
+						local line = ""
+
+						local count = 0
+						for i, t in pairs(v) do
+							count = count + 1
+						end
+
+						local pos = 0
+						for i, t in pairs(v) do
+							pos = pos + 1
+
+							if line == "" then
+								line = t
+							else
+								if count == 8 and pos == 5 then
+									line = line .. ",,," .. t
+								else
+									line = line .. "," .. t
+								end
+							end
+						end
+
+						line = line .. "," .. events:FormatLogMsg(v, "item")
+						log_lines[k + 1] = line
+					else
+						log_lines[1] = "type,name,amount,years,months,days,hours,line"
+						local line  = ""
+
+						for i, t in pairs(v) do
+							if line == "" then
+								line = t
+							else
+								line = line .. "," .. t
+							end
+						end
+						line = line .. "," .. events:FormatLogMsg(v, "money")
+						log_lines[k + 1] = line
+					end
+				end
+
+				events:ExportText(log_lines)
+		  end)
+		  if events:CountLogs() == 0 or not db.Active.log then export_btn:Disable() end
 
 	local copy_btn = CreateFrame("Button", "copy_btn", self)
 		  copy_btn:SetSize(16, 16)  
@@ -583,34 +652,20 @@ function events:RefreshButtons()
 			delete_all:Disable()
 		end
 		delete_btn:Disable()
+		export_btn:Disable()
 		copy_btn:Disable()
 	elseif not db.Active.log then
 		delete_all:Enable()
 		delete_btn:Disable()
+		export_btn:Disable()
 		copy_btn:Disable()
 	else
 		delete_all:Enable()
 		delete_btn:Enable()
+		export_btn:Enable()
 		copy_btn:Enable()
 	end
 end
-
--- -- -- -- -- BLIZZ CONSTANTS (ENGLISH)... IN CASE THEY ARE NOT AVAILABLE DUE TO NOT LOADING WITH BAGNON -- -- -- -- --
-GUILDBANK_MOVE_FORMAT = GUILDBANK_MOVE_FORMAT or "%s moved %s x %d from %s to %s"
-GUILD_BANK_LOG_TIME_PREPEND = GUILD_BANK_LOG_TIME_PREPEND or "|cff009999   "
-GUILD_BANK_LOG_TIME = GUILD_BANK_LOG_TIME or "( %s ago )"
-NORMAL_FONT_COLOR_CODE = NORMAL_FONT_COLOR_CODE or "|cffffd200"
-UNKNOWN = UNKNOWN or "Unknown"
-GUILDBANK_DEPOSIT_MONEY_FORMAT = GUILDBANK_DEPOSIT_MONEY_FORMAT or "%s deposited %s"
-GUILDBANK_WITHDRAW_MONEY_FORMAT = GUILDBANK_WITHDRAW_MONEY_FORMAT or "%s |cffff2020withdrew|r %s"
-GUILDBANK_REPAIR_MONEY_FORMAT = GUILDBANK_REPAIR_MONEY_FORMAT or "%s withdrew %s for repairs"
-GUILDBANK_WITHDRAWFORTAB_MONEY_FORMAT = GUILDBANK_WITHDRAWFORTAB_MONEY_FORMAT or "%s withdrew %s to purchase a guild bank tab"
-GUILDBANK_BUYTAB_MONEY_FORMAT = GUILDBANK_BUYTAB_MONEY_FORMAT or "%s purchased a guild bank tab for %s"
-GUILDBANK_UNLOCKTAB_FORMAT = GUILDBANK_UNLOCKTAB_FORMAT or "%s unlocked a guild bank tab with a Guild Vault Voucher."
-GUILDBANK_AWARD_MONEY_SUMMARY_FORMAT = GUILDBANK_AWARD_MONEY_SUMMARY_FORMAT or "A total of %s was deposited last week from Guild Perk: Cash Flow "
-GUILDBANK_DEPOSIT_FORMAT = GUILDBANK_DEPOSIT_FORMAT or "%s deposited %s"
-GUILDBANK_LOG_QUANTITY = GUILDBANK_LOG_QUANTITY or " x %d"
-GUILDBANK_WITHDRAW_FORMAT = GUILDBANK_WITHDRAW_FORMAT or "%s |cffff2020withdrew|r %s"
 
 -- -- -- -- -- FUNCTIONS: FORMAT LOG -- -- -- -- --
 function events:FormatLogMsg(log, log_type, copy)
@@ -859,6 +914,89 @@ function events:CopyText()
 	events.copy_editbox:SetFocus()
 	events.copy_editbox:HighlightText()
 	events.copy_frame:Show()
+end
+
+-- -- -- -- -- FUNCTIONS: Export TEXT -- -- -- -- --
+function events:ExportText(lines)
+	if db["Active"].page ~= "transactions_tab" and db["Active"].page ~= "money_tab" then
+		return false
+	end
+
+	local msg = ""
+
+	for k, v in pairs(lines) do
+		msg = msg ~= "" and msg .. "\n" .. v or v
+	end
+
+	if not events.export_frame then
+		events.export_frame = CreateFrame("Frame", "export_frame", UIParent)
+		local frame = events.export_frame
+			  frame:SetPoint("CENTER", 0, 50)
+			  frame:SetSize(450, 450)
+			  frame:SetToplevel(true)
+			  frame:SetFrameStrata("HIGH")
+			  frame:EnableMouse(true)
+			  frame:SetMovable(true)
+			  frame:SetBackdrop({
+			  		bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+			  		edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+			  		edgeSize = 25,
+			  		insets = {
+				  		left = 8,
+				  		right = 8,
+				  		top = 8,
+				  		bottom = 8
+				  	}
+			  })
+
+		events.export_scrollframe = CreateFrame("ScrollFrame", "export_scrollframe", frame, "UIPanelScrollFrameTemplate")
+		local export_scrollframe = events.export_scrollframe
+		export_scrollframe:SetSize(375, 250)
+		export_scrollframe:SetPoint("TOP", 0, -30)
+	    export_scrollframe.ScrollBar:EnableMouseWheel(true)
+	    export_scrollframe.ScrollBar:SetScript("OnMouseWheel", function(self, direction)
+	        ScrollFrameTemplate_OnMouseWheel(export_scrollframe, direction)
+	    end)
+
+		local ScrollContent = CreateFrame("Frame", nil, export_scrollframe)
+		ScrollContent:SetSize(export_scrollframe:GetWidth(), export_scrollframe:GetHeight())
+
+		export_scrollframe.ScrollContent = ScrollContent
+		export_scrollframe:SetScrollChild(ScrollContent)
+
+		events.export_editbox = CreateFrame("Editbox", "export_editbox", ScrollContent)
+		local export_editbox = events.export_editbox
+			  export_editbox:SetAllPoints(ScrollContent)
+			  export_editbox:SetFontObject(GameFontHighlightSmall)
+			  export_editbox:SetAutoFocus(true)
+			  export_editbox:SetMultiLine(true)
+			  export_editbox:SetMaxLetters(9000)
+			  export_editbox:SetScript("OnEscapePressed", function(this)
+				  this:SetText("")
+				  this:ClearFocus()
+				  events.export_frame:Hide()
+			  end)
+
+		local export_txt = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+			  export_txt:SetText("INSTRUCTIONS: Copy and paste the above text into any text editor (such as Notepad). Save the file with a \".csv\" extension. If necessary, make sure that you change the file type to \"All Files\" before saving with this extension. For example, in Notepad, if you skip this text you will end up with a normal text file called \"file.csv.txt\". You can open this CSV file in Excel.")
+			  export_txt:SetPoint("TOP", export_scrollframe, "BOTTOM", 0, -15)
+			  export_txt:SetWidth(375)
+			  export_txt:SetJustifyH("LEFT")
+			  export_txt:SetWordWrap(true)
+
+		local export_close = CreateFrame("Button", "export_close", frame, "UIPanelButtonTemplate")
+			  export_close:SetSize(150, 25)
+			  export_close:SetText(L["Close"])
+			  export_close:SetPoint("TOP", export_txt, "BOTTOM", 0, -15)
+			  export_close:SetScript("OnClick", function(self)
+			  		events.export_frame:Hide()
+			  end)
+	end
+
+	events.export_editbox:SetText(msg)
+	events.export_editbox:SetFocus()
+	events.export_editbox:HighlightText()
+	events.export_frame:Show()
 end
 
 -- -- -- -- -- STATIC POPUPS: DELETE ALL -- -- -- -- --
