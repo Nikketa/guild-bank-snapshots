@@ -1,118 +1,840 @@
--- ADD COMPATIBILITY WITH BAGNON: CHECK IF BAGNON IS LOADED AND IF SO, SET THE BUTTON UP ON ITS INTERFACE, DO NOT MANUALLY LOAD GBANK AT START.
+local Addon, ns = ...
 
-local addon, ns = ...
-local addon_prefix = "|cff00ff00Pro-Log Guild: |r"
-
--- -- -- -- -- LOCALIZATION -- -- -- -- --
-ns.Localization = setmetatable({}, {__index = function(t, k)
-	local v = tostring(k)
-	rawset(t, k, v)
-	return v
+local db = setmetatable({}, {__index = function(t, k)
+    return _G["ProLogGuildDB"][k]
 end})
 
-ns.Locale = GetLocale()
-local L = ns.Localization
+local Frame = CreateFrame("Frame", Addon .. "Frame", UIParent)
+Frame:SetScript("OnEvent", function(self, event, ...)
+	return self[event] and self[event](self, event, ...)
+end)
 
--- -- -- -- -- VARIABLES -- -- -- -- --
-local db
-local loaded
-local first = true
-local query_counter, log_table, guild, date_str
+Frame:RegisterEvent("ADDON_LOADED")
+Frame:RegisterEvent("GUILDBANKBAGSLOTS_CHANGED")
 
--- -- -- -- -- SLASH COMMAND -- -- -- -- --
-SLASH_PROLOGGUILD1 = "/plg"
+Frame:Hide()
 
-function SlashCmdList.PROLOGGUILD(msg)
-	ns.events:ShowFrame()
-end
+ns.Frame = Frame
+ns.db = db
 
--- -- -- -- -- EVENT FRAME -- -- -- -- --
-local events = CreateFrame("Frame", "ProLogGuildFrame", UIParent)
-	  events:RegisterEvent("ADDON_LOADED")
-	  events:SetScript("OnEvent", function(self, event, ...)
-		  return self[event] and self[event](self, event, ...)
-	  end)
-	  events:Hide()
-	  ns.events = events
+-- /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// --
 
--- -- -- -- -- EVENT FUNCTIONS: ADDON_LOADED -- -- -- -- --
-function events:ADDON_LOADED(event, addon)
-	local has_bagnon = false
+local has_bagnon
 
-	if addon == "Bagnon_GuildBank" then
-		events:RegisterEvent("GUILDBANKBAGSLOTS_CHANGED")
-	elseif addon == "ProLogGuild" then
-		ProLogGuildDB = ProLogGuildDB or {
-			Settings = {},
-			Transactions = {},
-			Active = {["page"] = "transactions_tab", ["guild"] = false, ["log"] = false, ["tab"] = false}
-		}
+function Frame:ADDON_LOADED(event, addon, ...)
+	if addon == Addon then
+		Frame:ValidateDB()
 
-		db = ProLogGuildDB
-
-		db.Settings = db.Settings or {}
-		db.Transactions = db.Transactions or {}
-		db.Active = db.Active or {["page"] = "transactions_tab", ["guild"] = false, ["log"] = false, ["tab"] = false}
-		db.Active["page"] = db.Active["page"] or "transactions_tab"
-		db.Active["guild"] = db.Active["guild"] or false
-		db.Active["log"] = db.Active["log"] or false
-		db.Active["tab"] = db.Active["tab"] or false
-
-		print(addon_prefix .. L["Use the command \"/plg\" to open the review window."])
-	elseif addon == "Blizzard_GuildBankUI" then
-		local scan_btn = CreateFrame("Button", "scan_btn", GuildBankFrame, "UIPanelButtonTemplate")
-			  scan_btn:SetFrameStrata("MEDIUM")
-			  scan_btn:SetSize(100, 21)
-			  scan_btn:SetText(L["Scan Bank"])
-			  scan_btn:SetPoint("BOTTOMLEFT", GuildBankFrame, "BOTTOMLEFT", 11, 31)
-			  scan_btn:SetScript("OnClick", function()
-			  		if not loaded then
-			  			events:CreateDisplay()
-			  			events:Hide()
-			  		end
-			  		events:ScanLogs()
-			  end)
-			  ns.scan_btn = scan_btn
+		db.ActiveGuild = false
+		db.ActiveLog = false
+		db.ActivePage = false
+		db.ActiveTab = false
+	elseif addon == "Bagnon_GuildBank" then
+		has_bagnon = true
 	end
 end
 
-function events:GUILDBANKBAGSLOTS_CHANGED(...)
-	local scan_btn = CreateFrame("Button", "scan_btn", BagnonFrameguildbank.brokerDisplay or BagnonFrameguildbank, "UIPanelButtonTemplate")
-		  scan_btn:SetSize(100, 21)
-		  scan_btn:SetToplevel(true)
-		  scan_btn:SetText(L["Scan Bank"])
-		  scan_btn:SetPoint("CENTER", BagnonFrameguildbank, "BOTTOM", 0, 17)
-		  scan_btn:SetScript("OnClick", function()
-		  		if not loaded then
-		  			events:CreateDisplay()
-		  			events:Hide()
-		  		end
-		  		events:ScanLogs()
-		  end)
-		  ns.scan_btn = scan_btn
+-- /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// --
 
-	events:UnregisterEvent("GUILDBANKBAGSLOTS_CHANGED")
+local copy_lines = {}
+local copy_loaded
+
+function Frame:CopyText()
+	if (db.ActivePage ~= "TransactionsTab" and db.ActivePage ~= "MoneyTab") or not db.ActiveGuild or not db.ActiveLog or not db.ActiveTab then
+		return false
+	end
+
+	table.wipe(copy_lines)
+
+	local transactions_table = db.ActivePage == "TransactionsTab" and db.Transactions[db.ActiveGuild][db.ActiveLog]["tab" .. db.ActiveTab] or db.Transactions[db.ActiveGuild][db.ActiveLog]["tab" .. db.Transactions[db.ActiveGuild][db.ActiveLog].MaxTabs + 1]
+
+	for k, v in pairs(transactions_table.transactions) do
+		local msg = Frame:FormatMsg(v, db.ActivePage == "TransactionsTab" and "item" or "money")
+
+		if msg then
+			table.insert(copy_lines, msg)
+		end
+	end
+
+	local msg = ""
+	for k, v in pairs(copy_lines) do
+		msg = msg ~= "" and msg .. "\n" .. v or v
+	end
+
+-- ///////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
+	local CopyFrame, CopyEditbox
+
+	if not copy_loaded then
+		CopyFrame = CreateFrame("Frame", Addon .. "CopyFrame", UIParent)
+		CopyFrame:SetSize(450, 340)
+		CopyFrame:SetPoint("CENTER", 0, 50)
+
+		CopyFrame:SetToplevel(true)
+		CopyFrame:SetFrameStrata("HIGH")
+		CopyFrame:EnableMouse(true)
+		CopyFrame:SetMovable(true)
+
+		CopyFrame:SetBackdrop({
+			bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+			edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+			edgeSize = 25,
+			insets = {
+				left = 8,
+				right = 8,
+				top = 8,
+				bottom = 8
+			}
+		})
+
+		Frame.CopyFrame = CopyFrame
+
+-- ///////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
+		local CopyScrollFrame = CreateFrame("ScrollFrame", Addon .. "CopyScrollFrame", CopyFrame, "UIPanelScrollFrameTemplate")
+		CopyScrollFrame:SetSize(375, 250)
+		CopyScrollFrame:SetPoint("TOP", 0, -30)
+
+	    CopyScrollFrame.ScrollBar:EnableMouseWheel(true)
+	    CopyScrollFrame.ScrollBar:SetScript("OnMouseWheel", function(self, direction)
+	        ScrollFrameTemplate_OnMouseWheel(CopyScrollFrame, direction)
+	    end)
+
+		local ScrollContent = CreateFrame("Frame", nil, CopyScrollFrame)
+		ScrollContent:SetSize(CopyScrollFrame:GetWidth(), CopyScrollFrame:GetHeight())
+
+		CopyFrame.ScrollFrame = CopyScrollFrame
+		CopyScrollFrame.ScrollContent = ScrollContent
+		CopyScrollFrame:SetScrollChild(ScrollContent)
+
+		local CopyEditBox = CreateFrame("Editbox", "CopyEditBox", ScrollContent)
+		CopyEditBox:SetScript("OnEscapePressed", function(this)
+			this:SetText("")
+			this:ClearFocus()
+			Frame.CopyFrame:Hide()
+		end)
+
+		CopyEditBox:SetAllPoints(ScrollContent)
+
+		CopyEditBox:SetFontObject(GameFontHighlightSmall)
+		CopyEditBox:SetAutoFocus(true)
+		CopyEditBox:SetMultiLine(true)
+		CopyEditBox:SetMaxLetters(9000)
+
+		Frame.CopyEditBox = CopyEditBox
+
+-- ///////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
+		local CopyCloseBTN = CreateFrame("Button", Addon .. "CopyCloseBTN", CopyFrame, "UIPanelButtonTemplate")
+		CopyCloseBTN:SetScript("OnClick", function(self)
+			Frame.CopyFrame:Hide()
+		end)
+
+		CopyCloseBTN:SetSize(150, 25)
+		CopyCloseBTN:SetPoint("TOP", CopyScrollFrame, "BOTTOM", 0, -15)
+
+		CopyCloseBTN:SetText("Close")
+
+		copy_loaded = true
+	end
+
+-- ///////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
+	Frame.CopyEditBox:SetText(msg)
+	Frame.CopyEditBox:SetFocus()
+	Frame.CopyEditBox:HighlightText()
+	Frame.CopyFrame:Show()
 end
 
--- -- -- -- -- BLIZZ CONSTANTS (ENGLISH)... IN CASE THEY ARE NOT AVAILABLE DUE TO NOT LOADING WITH BAGNON -- -- -- -- --
-GUILDBANK_MOVE_FORMAT = GUILDBANK_MOVE_FORMAT or "%s moved %s x %d from %s to %s"
-GUILD_BANK_LOG_TIME_PREPEND = GUILD_BANK_LOG_TIME_PREPEND or "|cff009999   "
-GUILD_BANK_LOG_TIME = GUILD_BANK_LOG_TIME or "( %s ago )"
-NORMAL_FONT_COLOR_CODE = NORMAL_FONT_COLOR_CODE or "|cffffd200"
-UNKNOWN = UNKNOWN or "Unknown"
-GUILDBANK_DEPOSIT_MONEY_FORMAT = GUILDBANK_DEPOSIT_MONEY_FORMAT or "%s deposited %s"
-GUILDBANK_WITHDRAW_MONEY_FORMAT = GUILDBANK_WITHDRAW_MONEY_FORMAT or "%s |cffff2020withdrew|r %s"
-GUILDBANK_REPAIR_MONEY_FORMAT = GUILDBANK_REPAIR_MONEY_FORMAT or "%s withdrew %s for repairs"
-GUILDBANK_WITHDRAWFORTAB_MONEY_FORMAT = GUILDBANK_WITHDRAWFORTAB_MONEY_FORMAT or "%s withdrew %s to purchase a guild bank tab"
-GUILDBANK_BUYTAB_MONEY_FORMAT = GUILDBANK_BUYTAB_MONEY_FORMAT or "%s purchased a guild bank tab for %s"
-GUILDBANK_UNLOCKTAB_FORMAT = GUILDBANK_UNLOCKTAB_FORMAT or "%s unlocked a guild bank tab with a Guild Vault Voucher."
-GUILDBANK_AWARD_MONEY_SUMMARY_FORMAT = GUILDBANK_AWARD_MONEY_SUMMARY_FORMAT or "A total of %s was deposited last week from Guild Perk: Cash Flow "
-GUILDBANK_DEPOSIT_FORMAT = GUILDBANK_DEPOSIT_FORMAT or "%s deposited %s"
-GUILDBANK_LOG_QUANTITY = GUILDBANK_LOG_QUANTITY or " x %d"
-GUILDBANK_WITHDRAW_FORMAT = GUILDBANK_WITHDRAW_FORMAT or "%s |cffff2020withdrew|r %s"
+-- /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// --
 
--- -- -- -- -- FUNCTIONS: PAIRS BY KEYS -- -- -- -- --
-events.pairsByKeys = function(_, t, f)
+function Frame:CountLogs(guild)
+	local counter = 0
+	local gcounter = 0
+
+	if guild == "ALL_GUILDS" then
+		for k, v in pairs(db.Transactions) do
+			gcounter = gcounter + 1
+		end
+	elseif guild and db.Transactions[guild] then	
+		for k, v in pairs(db.Transactions[guild]) do
+			for a, b in pairs(v) do
+				counter = counter + 1
+			end
+		end
+	else
+		for k, v in pairs(db.Transactions) do
+			gcounter = gcounter + 1
+
+			for a, b in pairs(v) do
+				counter = counter + 1
+			end
+		end
+	end
+
+	return guild == "ALL_GUILDS" and gcounter or counter
+end
+
+-- /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
+local loaded
+
+function Frame:CreateFrame(self)
+	if loaded then
+		self:RefreshButtons()
+		self:Show()
+		return
+	end
+
+-- ///////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
+	self:EnableMouse(true)
+	self:SetMovable(true)
+	self:SetToplevel(true)
+
+	self:SetSize(832, 447)
+	self:SetPoint("CENTER", 0, 0)
+
+-- ///////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
+	self.Textures = {
+		{point = "TOPLEFT", file = "BID-TOPLEFT", w = 256, h = 256, x = 0, y = 0},
+		{point = "TOP", file = "AUCTION-TOP", w = 320, h = 256, x = 256, y = 0},
+		{point = "TOPRIGHT", file = "AUCTION-TOPRIGHT", w = 256, h = 256, x = 0, y = 0, anchor = "TOP"},
+		{point = "BOTTOMLEFT", file = "BID-BOTLEFT", w = 256, h = 256, x = 0, y = -256},
+		{point = "BOTTOM", file = "AUCTION-BOT", w = 320, h = 256, x = 256, y = -256},
+		{point = "BOTTOMRIGHT", file = "BID-BOTRIGHT", w = 256, h = 256, x = 0, y = 0, anchor = "BOTTOM"},
+	}
+
+	for k, v in pairs(self.Textures) do
+		self[v.point] = self:CreateTexture(nil, "BACKGROUND")
+		self[v.point]:SetSize(v.w, v.h)
+		self[v.point]:SetTexture("Interface\\AUCTIONFRAME\\UI-AUCTIONFRAME-" .. v.file .. ".BLP")
+
+		if v.anchor then
+			self[v.point]:SetPoint("TOPLEFT", self[v.anchor], "TOPRIGHT", v.x, v.y)
+		else
+			self[v.point]:SetPoint("TOPLEFT", v.x, v.y)
+		end
+	end
+
+-- ///////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
+	local Portrait = self:CreateTexture(nil, "BACKGROUND")
+	Portrait:SetSize(58, 58)
+	Portrait:SetPoint("TOPLEFT", 8, -7)
+	SetPortraitTexture(Portrait, "player")
+
+-- ///////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
+	local TitleRegion = self:CreateTitleRegion()
+	TitleRegion:SetPoint("CENTER", self, "TOP", 0, -30)
+	TitleRegion:SetSize(self:GetWidth(), 45)
+
+	local TitleTXT = self:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	TitleTXT:SetText("PLG (Pro-Log Guild)")
+	TitleTXT:SetPoint("TOPLEFT", 85, -18)
+
+-- ///////////////////////////////////////////////////////////////////////////////////////////////////////// --
+	
+	local CloseBTN = CreateFrame("Button", Addon .. "CloseBTN", self, "UIPanelCloseButton")
+	CloseBTN:SetPoint("TOPRIGHT", 3, -8)
+
+	local DeleteAllBTN = CreateFrame("Button", Addon .. "DeleteAllBTN", self, "UIPanelButtonTemplate")
+	DeleteAllBTN:SetScript("OnClick", function()
+		StaticPopup_Show("PLG_DeleteAllConfirmation")
+	end)
+
+	DeleteAllBTN:SetSize(80, 22)
+	DeleteAllBTN:SetText("Delete All")
+	DeleteAllBTN:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", -8, 16)
+
+	self.DeleteAllBTN = DeleteAllBTN
+
+	local DeleteBTN = CreateFrame("Button", Addon .. "DeleteBTN", self, "UIPanelButtonTemplate")
+	DeleteBTN:SetScript("OnClick", function()
+		StaticPopup_Show("PLG_DeleteConfirmation")
+	end)
+
+	DeleteBTN:SetSize(80, 22)
+	DeleteBTN:SetText("Delete")
+	DeleteBTN:SetPoint("RIGHT", DeleteAllBTN, "LEFT", 0, 0)
+
+	self.DeleteBTN = DeleteBTN
+
+	local ExportBTN = CreateFrame("Button", Addon .. "ExportBTN", self, "UIPanelButtonTemplate")
+	ExportBTN:SetScript("OnClick", function()
+		self:Export()
+	end)
+
+	ExportBTN:SetSize(80, 22)
+	ExportBTN:SetText("Export")
+	ExportBTN:SetPoint("RIGHT", DeleteBTN, "LEFT", 0, 0)
+
+	self.ExportBTN = ExportBTN
+
+	local CopyBTN = CreateFrame("Button", Addon .. "CopyBTN", self)
+	CopyBTN:SetScript("OnClick", function()
+		self:CopyText()
+	end)
+
+	local texture = "Interface\\Buttons\\UI-GuildButton-PublicNote-%s.blp"
+	CopyBTN:SetNormalTexture(string.format(texture, "Up"))
+	CopyBTN:SetPushedTexture(string.format(texture, "Up"))
+	CopyBTN:SetDisabledTexture(string.format(texture, "Disabled"))
+
+	CopyBTN:SetSize(16, 16)
+	CopyBTN:SetPoint("TOPRIGHT", self, "TOPRIGHT", -15, -45)
+
+	self.CopyBTN = CopyBTN
+
+-- ///////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
+	self.Tabs = {
+		["Tab" .. 1] = {"TransactionsTab", "Item Transactions", 1},
+		["Tab" .. 2] = {"MoneyTab", "Money Transactions", 2},
+		["Tab" .. 3] = {"SettingsTab", "Settings", 3},
+		["Tab" .. 4] = {"HelpTab", "Help", 4}
+	}
+
+	self.TabButtons = {}
+
+	for k, v in self:pairsByKeys(self.Tabs) do
+		local tab = CreateFrame("Button", Addon .. v[1], self, "CharacterFrameTabButtonTemplate")
+		tab:SetScript("OnClick", function()
+			self:SelectTab(v[1])
+		end)
+
+		tab:SetText(v[2])
+
+		if k == "Tab1" then
+			tab:SetPoint("TOPLEFT", self, "BOTTOMLEFT", 25, 12)
+		else
+			tab:SetPoint("LEFT", Addon .. self.Tabs["Tab" .. v[3] - 1][1], "RIGHT", -15, 0)
+		end
+
+		self.TabButtons[v[1]] = tab
+	end
+
+-- ///////////////////////////////////////////////////////////////////////////////////////////////////////// --
+	
+	self.GuildTabBTNs = {}
+
+	for i = 1, MAX_GUILDBANK_TABS do
+		local tab = CreateFrame("Button", Addon .. "GuildTabBTN" .. i, self, "OptionsFrameTabButtonTemplate")
+		tab:SetScript("OnClick", function(self)
+			Frame:LoadLogs(i)
+		end)
+
+		tab:SetText(i)
+		tab:Disable()
+
+		self["GuildTabBTNs" .. i] = tab
+		
+		PanelTemplates_TabResize(tab, 0)
+
+		if i == 1 then
+			tab:SetPoint("TOPLEFT", 70, -45)
+		else
+			tab:SetPoint("TOPLEFT", Addon .. "GuildTabBTN" .. (i - 1), "TOPRIGHT", -10, 0)
+		end
+	end
+
+-- ///////////////////////////////////////////////////////////////////////////////////////////////////////// --
+	
+	local GuildDROP = CreateFrame("Frame", Addon .. "GuildDROP", self, "UIDropDownMenuTemplate")
+	UIDropDownMenu_SetWidth(GuildDROP, 150)
+	UIDropDownMenu_SetText(GuildDROP, db.ActiveGuild or "Select a guild...")
+	GuildDROP:SetPoint("TOPLEFT", Addon .. "GuildTabBTN" .. MAX_GUILDBANK_TABS, "TOPRIGHT", 5, 5)
+
+	UIDropDownMenu_Initialize(GuildDROP, function(self, level, menuList)
+		local info = UIDropDownMenu_CreateInfo()
+
+		if (level or 1) == 1 then
+			info.func = self.SetValue
+
+			for k, v in Frame:pairsByKeys(db.Transactions) do
+				info.menuList = k
+				info.text = k
+				info.arg1 = k
+				info.checked = db.ActiveGuild == k
+				info.hasArrow = false
+				UIDropDownMenu_AddButton(info)
+			end
+		end
+	end)
+
+	function GuildDROP:SetValue(selected)
+		db.ActiveGuild = selected
+
+		UIDropDownMenu_SetText(GuildDROP, selected)
+
+		if db.ActiveLog then
+			db.ActiveLog = false
+			UIDropDownMenu_SetText(LogDROP, "Select a log...")
+		end
+
+		UIDropDownMenu_Initialize(LogDROP, function(self, level, menuList)
+			local info = UIDropDownMenu_CreateInfo()
+
+			if (level or 1) == 1 then
+				info.func = self.SetValue
+
+				if db.Transactions[selected] then
+					for k, v in Frame:pairsByKeys(db.Transactions[selected]) do
+
+						info.menuList = k
+						info.text = k
+						info.arg1 = k
+						info.checked = db.ActiveLog == k
+						info.hasArrow = false
+						UIDropDownMenu_AddButton(info)
+					end
+				end
+			end
+		end)
+
+		for k, v in pairs(Frame.ScrollContentFrames) do
+			for a, b in pairs(v.Elements) do
+				b:ClearAllPoints()
+				b:Hide()
+			end
+		end
+
+		Frame:RefreshButtons()
+
+		CloseDropDownMenus()
+	end
+
+	Frame.GuildDROP = GuildDROP
+
+	local LogDROP = CreateFrame("Frame", "LogDROP", self, "UIDropDownMenuTemplate")
+	UIDropDownMenu_SetWidth(LogDROP, 175)
+	UIDropDownMenu_SetText(LogDROP, db.ActiveLog or "Select a log...")
+	LogDROP:SetPoint("TOPLEFT", GuildDROP, "TOPRIGHT", -15, 0)
+
+	function LogDROP:SetValue(selected)
+		db.ActiveLog = selected
+		db.ActiveTab = 1
+
+		UIDropDownMenu_SetText(LogDROP, selected)
+
+		Frame:RefreshButtons()
+		if db.ActivePage ~= "TransactionsTab" and db.ActivePage ~= "MoneyTab" then
+			Frame:SelectTab("TransactionsTab")
+		end
+		Frame:LoadLogs(db.ActivePage == "TransactionsTab" and 1)
+
+		CloseDropDownMenus()
+	end
+	
+	Frame.LogDROP = LogDROP
+
+-- ///////////////////////////////////////////////////////////////////////////////////////////////////////// --
+	
+	local ScrollFrame = CreateFrame("ScrollFrame", Addon .. "ScrollFrame", self, "UIPanelScrollFrameTemplate")
+	ScrollFrame:SetSize(770, 325)
+	ScrollFrame:SetPoint("TOPLEFT", 25, -78)
+
+	ScrollFrame.ScrollBar:EnableMouseWheel(true)
+	ScrollFrame.ScrollBar:SetScript("OnMouseWheel", function(self, direction)
+		ScrollFrameTemplate_OnMouseWheel(ScrollFrame, direction)
+	end)
+
+	local ScrollFrameBG = ScrollFrame:CreateTexture(nil, "BACKGROUND", nil, -6)
+	ScrollFrameBG:SetPoint("TOP")
+	ScrollFrameBG:SetPoint("RIGHT", 25, 0)
+	ScrollFrameBG:SetPoint("BOTTOM")
+	ScrollFrameBG:SetWidth(26)
+	ScrollFrameBG:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-ScrollBar.blp")
+	ScrollFrameBG:SetTexCoord(0, 0.45, 0.1640625, 1)
+	ScrollFrameBG:SetAlpha(0.5)
+
+	self.ScrollFrame = ScrollFrame
+
+	self.ScrollContentFrames = {}
+
+	for k, v in pairs(self.Tabs) do
+		local ScrollContent = CreateFrame("Frame", Addon .. v[1] .. "ScrollContent", ScrollFrame)
+		ScrollContent:SetSize(ScrollFrame:GetWidth(), ScrollFrame:GetHeight())
+
+		ScrollContent.Elements = {}
+
+		self.ScrollContentFrames[v[1]] = ScrollContent
+	end
+
+	ScrollFrame:SetScrollChild(self.ScrollContentFrames["TransactionsTab"])
+
+-- ///////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
+	local CurrentScrollContent = self.ScrollContentFrames["SettingsTab"]
+
+	local Header = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+	Header:SetPoint("TOPLEFT", 10, -10)
+
+	Header:SetText("Settings")
+
+	local ShowAfterScanCHK = CreateFrame("CheckButton", Addon .. "ShowAfterScanCHK", CurrentScrollContent, "OptionsBaseCheckButtonTemplate")
+	ShowAfterScanCHK:SetScript("OnClick", function(self)
+		db.Settings.ShowAfterScan = self:GetChecked() and true or false
+	end)
+	ShowAfterScanCHK:SetScript("OnShow", function(self)
+		self:SetChecked(db.Settings.ShowAfterScan)
+	end)
+
+	ShowAfterScanCHK:SetPoint("TOPLEFT", Header, "BOTTOMLEFT", 0, -5)
+	ShowAfterScanCHK:SetChecked(db.Settings.ShowAfterScan)
+
+	local ShowAfterScanTXT = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+	ShowAfterScanTXT:SetPoint("LEFT", ShowAfterScanCHK, "RIGHT", 5, 0)
+	ShowAfterScanTXT:SetText("Show log frame after bank scan")
+
+-- ///////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
+	CurrentScrollContent = self.ScrollContentFrames["HelpTab"]
+
+	Header = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+	Header:SetPoint("TOPLEFT", 10, -10)
+
+	Header:SetText("Help")
+
+	local HelpMsg = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+	HelpMsg:SetWidth(CurrentScrollContent:GetWidth() - 20)
+	HelpMsg:SetPoint("TOPLEFT", Header, "BOTTOMLEFT", 0, -5)
+
+	HelpMsg:SetText("If you need assistance with the addon, please leave a comment on Curse/WoW Interface or email me at addons@niketa.net.")
+	HelpMsg:SetJustifyH("LEFT")
+	HelpMsg:SetWordWrap(true)
+
+
+-- ///////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
+	self:SelectTab("TransactionsTab")	
+	self:RefreshButtons()
+	self:Show()
+
+	loaded = true
+end
+
+-- /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
+local export_lines = {}
+local export_loaded
+
+function Frame:Export()
+		if (db.ActivePage ~= "TransactionsTab" and db.ActivePage ~= "MoneyTab") or not db.ActiveGuild or not db.ActiveLog or not db.ActiveTab then
+		return false
+	end
+
+	table.wipe(export_lines)
+
+	local transactions_table = db.ActivePage == "TransactionsTab" and db.Transactions[db.ActiveGuild][db.ActiveLog]["tab" .. db.ActiveTab] or db.Transactions[db.ActiveGuild][db.ActiveLog]["tab" .. db.Transactions[db.ActiveGuild][db.ActiveLog].MaxTabs + 1]
+
+	local msg = ""
+	for k, v in pairs(transactions_table.transactions) do
+		local formatted = Frame:FormatMsg(v, db.ActivePage == "TransactionsTab" and "item" or "money")
+
+		if formatted then
+			local string = ""
+			for a, b in pairs(v) do
+				b = type(b) == "table" and "Tab " .. b[1] .. " (" .. b[2] .. ")" or b
+
+				string = string ~= "" and string .. "," .. b or b
+			end
+
+			msg = msg ~= "" and msg .. "\n" .. (string .. "," .. formatted) or (string .. "," .. formatted)
+		end
+	end
+
+	msg = (db.ActivePage == "TransactionsTab" and "type,name,itemLink,count,tab1,tab2,year,month,day,hour,line" or "type,name,amount,years,months,days,hours,line") .. "\n" .. msg
+
+-- ///////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
+	local ExportFrame, CopyEditbox
+
+	if not export_loaded then
+		ExportFrame = CreateFrame("Frame", Addon .. "ExportFrame", UIParent)
+		ExportFrame:SetSize(450, 450)
+		ExportFrame:SetPoint("CENTER", 0, 50)
+
+		ExportFrame:SetToplevel(true)
+		ExportFrame:SetFrameStrata("HIGH")
+		ExportFrame:EnableMouse(true)
+		ExportFrame:SetMovable(true)
+
+		ExportFrame:SetBackdrop({
+			bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+			edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+			edgeSize = 25,
+			insets = {
+				left = 8,
+				right = 8,
+				top = 8,
+				bottom = 8
+			}
+		})
+
+		Frame.ExportFrame = ExportFrame
+
+-- ///////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
+		local ExportScrollFrame = CreateFrame("ScrollFrame", Addon .. "ExportScrollFrame", ExportFrame, "UIPanelScrollFrameTemplate")
+		ExportScrollFrame:SetSize(375, 250)
+		ExportScrollFrame:SetPoint("TOP", 0, -30)
+
+	    ExportScrollFrame.ScrollBar:EnableMouseWheel(true)
+	    ExportScrollFrame.ScrollBar:SetScript("OnMouseWheel", function(self, direction)
+	        ScrollFrameTemplate_OnMouseWheel(ExportScrollFrame, direction)
+	    end)
+
+		local ScrollContent = CreateFrame("Frame", nil, ExportScrollFrame)
+		ScrollContent:SetSize(ExportScrollFrame:GetWidth(), ExportScrollFrame:GetHeight())
+
+		ExportFrame.ScrollFrame = ExportScrollFrame
+		ExportScrollFrame.ScrollContent = ScrollContent
+		ExportScrollFrame:SetScrollChild(ScrollContent)
+
+		local ExportEditBox = CreateFrame("Editbox", "ExportEditBox", ScrollContent)
+		ExportEditBox:SetScript("OnEscapePressed", function(this)
+			this:SetText("")
+			this:ClearFocus()
+			Frame.ExportFrame:Hide()
+		end)
+
+		ExportEditBox:SetAllPoints(ScrollContent)
+
+		ExportEditBox:SetFontObject(GameFontHighlightSmall)
+		ExportEditBox:SetAutoFocus(true)
+		ExportEditBox:SetMultiLine(true)
+		ExportEditBox:SetMaxLetters(9000)
+
+		Frame.ExportEditBox = ExportEditBox
+
+-- ///////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
+		local Warning = ExportFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+		Warning:SetWidth(375)
+		Warning:SetPoint("TOP", ExportScrollFrame, "BOTTOM", 0, -10)
+
+		Warning:SetText("This will allow you to export the current tab of the current log, not the entire log.")
+		Warning:SetJustifyH("CENTER")
+		Warning:SetWordWrap(true)
+
+		local Instructions = ExportFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+		Instructions:SetWidth(375)
+		Instructions:SetPoint("TOP", Warning, "BOTTOM", 0, -5)
+
+		Instructions:SetText("INSTRUCTIONS: To create a CSV file that you can open in Excel, copy and paste the above text into any text editor (such as Notepad). Save the file with a \".csv\" extension. Be sure that you are actually saving the file as a CSV and not a rich text file named \"TestFile.csv.txt\". In some cases, you may need to select a file type of \"All Files\".")
+		Instructions:SetJustifyH("LEFT")
+		Instructions:SetWordWrap(true)
+
+-- ///////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
+		local ExportCloseBTN = CreateFrame("Button", Addon .. "ExportCloseBTN", ExportFrame, "UIPanelButtonTemplate")
+		ExportCloseBTN:SetScript("OnClick", function(self)
+			Frame.ExportFrame:Hide()
+		end)
+
+		ExportCloseBTN:SetSize(150, 25)
+		ExportCloseBTN:SetPoint("TOP", Instructions, "BOTTOM", 0, -15)
+
+		ExportCloseBTN:SetText("Close")
+
+		export_loaded = true
+	end
+
+-- ///////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
+	Frame.ExportEditBox:SetText(msg)
+	Frame.ExportEditBox:SetFocus()
+	Frame.ExportEditBox:HighlightText()
+	Frame.ExportFrame:Show()
+end
+
+-- /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
+-- GUILDBANK_MOVE_FORMAT = GUILDBANK_MOVE_FORMAT or "%s moved %s x %d from %s to %s"
+-- GUILD_BANK_LOG_TIME_PREPEND = GUILD_BANK_LOG_TIME_PREPEND or "|cff009999   "
+-- GUILD_BANK_LOG_TIME = GUILD_BANK_LOG_TIME or "( %s ago )"
+-- NORMAL_FONT_COLOR_CODE = NORMAL_FONT_COLOR_CODE or "|cffffd200"
+-- FONT_COLOR_CODE_CLOSE = FONT_COLOR_CODE_CLOSE or "|r"
+-- UNKNOWN = UNKNOWN or "Unknown"
+-- GUILDBANK_DEPOSIT_MONEY_FORMAT = GUILDBANK_DEPOSIT_MONEY_FORMAT or "%s deposited %s"
+-- GUILDBANK_WITHDRAW_MONEY_FORMAT = GUILDBANK_WITHDRAW_MONEY_FORMAT or "%s |cffff2020withdrew|r %s"
+-- GUILDBANK_REPAIR_MONEY_FORMAT = GUILDBANK_REPAIR_MONEY_FORMAT or "%s withdrew %s for repairs"
+-- GUILDBANK_WITHDRAWFORTAB_MONEY_FORMAT = GUILDBANK_WITHDRAWFORTAB_MONEY_FORMAT or "%s withdrew %s to purchase a guild bank tab"
+-- GUILDBANK_BUYTAB_MONEY_FORMAT = GUILDBANK_BUYTAB_MONEY_FORMAT or "%s purchased a guild bank tab for %s"
+-- GUILDBANK_UNLOCKTAB_FORMAT = GUILDBANK_UNLOCKTAB_FORMAT or "%s unlocked a guild bank tab with a Guild Vault Voucher."
+-- GUILDBANK_AWARD_MONEY_SUMMARY_FORMAT = GUILDBANK_AWARD_MONEY_SUMMARY_FORMAT or "A total of %s was deposited last week from Guild Perk: Cash Flow "
+-- GUILDBANK_DEPOSIT_FORMAT = GUILDBANK_DEPOSIT_FORMAT or "%s deposited %s"
+-- GUILDBANK_LOG_QUANTITY = GUILDBANK_LOG_QUANTITY or " x %d"
+-- GUILDBANK_WITHDRAW_FORMAT = GUILDBANK_WITHDRAW_FORMAT or "%s |cffff2020withdrew|r %s"
+
+function Frame:FormatMsg(line, log_type)
+	local msg
+
+	local type = line[1]
+	local name = line[2]
+
+	if not name then
+		name = UNKNOWN or "Unknown"
+	end
+
+	name = (NORMAL_FONT_COLOR_CODE or "|cffffd200") .. name .. (FONT_COLOR_CODE_CLOSE or "|r")
+
+	if log_type == "money" then
+		local money
+		local amount = line[3]
+		local year = line[4]
+		local month = line[5]
+		local day = line[6]
+		local hour = line[7]
+
+		money = GetDenominationsFromCopper(amount)
+
+		if type == "deposit" then
+			msg = format(GUILDBANK_DEPOSIT_MONEY_FORMAT or "%s deposited %s", name, money)
+		elseif type == "withdraw" then
+			msg = format(GUILDBANK_WITHDRAW_MONEY_FORMAT or "%s |cffff2020withdrew|r %s", name, money)
+		elseif type == "repair" then
+			msg = format(GUILDBANK_REPAIR_MONEY_FORMAT or "%s withdrew %s for repairs", name, money)
+		elseif type == "withdrawForTab" then
+			msg = format(GUILDBANK_WITHDRAWFORTAB_MONEY_FORMAT or "%s withdrew %s to purchase a guild bank tab", name, money)
+		elseif type == "buyTab" then
+			if amount > 0 then
+				msg = format(GUILDBANK_BUYTAB_MONEY_FORMAT or "%s purchased a guild bank tab for %s", name, money)
+			else
+				msg = format(GUILDBANK_UNLOCKTAB_FORMAT or "%s unlocked a guild bank tab with a Guild Vault Voucher.", name)
+			end
+		elseif type == "depositSummary" then
+			msg = format(GUILDBANK_AWARD_MONEY_SUMMARY_FORMAT or "A total of %s was deposited last week from Guild Perk: Cash Flow ", money)
+		end
+
+		if not msg then
+			return
+		end
+		msg = msg .. (GUILD_BANK_LOG_TIME_PREPEND or "|cff009999   ") .. format(GUILD_BANK_LOG_TIME or "( %s ago )", RecentTimeDate(year, month, day, hour))
+	elseif log_type == "item" then
+		local itemLink = line[3]
+		local count = line[4]
+		local tab1 = line[5] ~= 0 and "Tab " .. line[5][1] .. " (" .. line[5][2] .. ")" or line[5]
+		local tab2 = line[6] ~= 0 and "Tab " .. line[6][1] .. " (" .. line[6][2] .. ")" or line[6]
+		local year = line[7]
+		local month = line[8]
+		local day = line[9]
+		local hour = line[10]
+
+		if type == "deposit" then
+			msg = format(GUILDBANK_DEPOSIT_FORMAT or "%s deposited %s", name, itemLink)
+			if count > 1 then
+				msg = msg .. format(GUILDBANK_LOG_QUANTITY or " x %d", count)
+			end
+		elseif type == "withdraw" then
+			msg = format(GUILDBANK_WITHDRAW_FORMAT or "%s |cffff2020withdrew|r %s", name, itemLink)
+			if count > 1 then
+				msg = msg .. format(GUILDBANK_LOG_QUANTITY or " x %d", count)
+			end
+		elseif type == "move" then
+			msg = format(GUILDBANK_MOVE_FORMAT or "%s moved %s x %d from %s to %s", name, itemLink, count, tab1, tab2)
+		end
+
+		if not msg then
+			return
+		end
+		msg = msg .. (GUILD_BANK_LOG_TIME_PREPEND or "|cff009999   ") .. format(GUILD_BANK_LOG_TIME or "( %s ago )", RecentTimeDate(year, month, day, hour))
+	end
+
+	return msg
+end
+
+-- /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
+local first = true
+
+function Frame:GUILDBANKBAGSLOTS_CHANGED(...)
+	local parent = has_bagnon and (BagnonFrameguildbank.brokerDisplay or BagnonFrameguildbank) or GuildBankFrame
+	local point = has_bagnon and {"CENTER", BagnonFrameguildbank, "BOTTOM", 0, 17} or {"BOTTOMLEFT", GuildBankFrame, "BOTTOMLEFT", 11, 31}
+
+	local ScanBTN = CreateFrame("Button", Addon .. "ScanBTN", parent, "UIPanelButtonTemplate")
+	ScanBTN:SetScript("OnClick", function(self)
+		Frame:Print("Starting scan...")
+		self:Disable()
+
+		for i = 1, MAX_GUILDBANK_TABS + 1 do
+			QueryGuildBankLog(i)
+		end
+
+		if first then
+			C_Timer.After(2, Frame.ScanLogs)
+			first = nil
+		else
+			C_Timer.After(1, Frame.ScanLogs)
+		end
+	end)
+
+	ScanBTN:SetToplevel(has_bagnon)
+	ScanBTN:SetSize(100, 21)
+	ScanBTN:SetPoint(point[1], point[2], point[3], point[4], point[5])
+
+	ScanBTN:SetText("Scan Bank")
+
+	Frame.ScanBTN = ScanBTN
+
+	Frame:UnregisterEvent("GUILDBANKBAGSLOTS_CHANGED")
+end
+
+-- /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
+function Frame:LoadLogs(tab)
+	if not db.ActiveLog then
+		return
+	end
+
+	local ScrollContent = self.ScrollContentFrames[db.ActivePage]
+	db.ActiveTab = tab or db.ActiveTab
+
+	ScrollContent:GetParent().ScrollBar:SetValue(0)
+
+	local lines = ScrollContent.Elements
+
+	for k, v in pairs(lines) do
+		v:ClearAllPoints()
+		v:Hide()
+	end
+
+	local transactions_table = tab and db.Transactions[db.ActiveGuild][db.ActiveLog]["tab" .. tab] or db.Transactions[db.ActiveGuild][db.ActiveLog]["tab" .. db.Transactions[db.ActiveGuild][db.ActiveLog].MaxTabs + 1]
+
+	lines["header"] = lines["header"] or ScrollContent:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+	lines["header"]:SetText(tab and ("Tab " .. tab .. " (" .. transactions_table.name .. ")") or "Money Log")
+	lines["header"]:SetPoint("TOPLEFT", 10, -10)
+
+	lines["header"]:Show()
+
+	local i = 1
+	for k, v in pairs(transactions_table.transactions) do
+		local msg = Frame:FormatMsg(v, tab and "item" or "money")
+
+		if msg then
+			lines[i] = lines[i] or ScrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+			lines[i]:SetWidth(ScrollContent:GetWidth() - 20)
+			lines[i]:SetPoint("TOPLEFT", i > 1 and lines[i - 1] or lines["header"], "BOTTOMLEFT", 0, -5)
+
+			lines[i]:SetText(msg)
+			lines[i]:SetWordWrap(true)
+			lines[i]:SetJustifyH("LEFT")
+
+			lines[i]:Show()
+
+			i = i + 1
+		end
+	end
+
+	Frame:RefreshButtons()
+end
+
+-- /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
+Frame.pairsByKeys = function(_, t, f)
 	local a = {}
 		for n in pairs(t) do table.insert(a, n) end
 		table.sort(a, f)
@@ -126,933 +848,221 @@ events.pairsByKeys = function(_, t, f)
 	return iter
 end
 
--- -- -- -- -- FUNCTIONS: SHOW FRAME -- -- -- -- --
-function events:ShowFrame()
-	local self = events
+-- /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// --
 
-	if loaded then
-		if self:IsVisible() then self:Hide() else self:Show() end
+function Frame:Print(msg)
+	print("|cff00ff00PLG: |r" .. msg)
+end
+
+-- /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
+function Frame:RefreshButtons()
+	if Frame:CountLogs() == 0 or not db.ActiveLog then
+		Frame.DeleteBTN:Disable()
+		Frame.ExportBTN:Disable()
 	else
-		self:CreateDisplay()
-	end
-end
-
--- -- -- -- -- FUNCTIONS: GENERATE FRAME -- -- -- -- --
-function events:CreateDisplay()
-	local self = events
-
-	db.Active["page"] = "transactions_tab"
-	db.Active["guild"] = false
-	db.Active["log"] = false
-	db.Active["tab"] = false
-
-	self:EnableMouse(true)
-	self:SetMovable(true)
-	self:SetToplevel(true)
-
-	-- -- TEXTURES -- --
-	self.textures = {
-		{point = "TOPLEFT", file = "BID-TOPLEFT", w = 256, h = 256, x = 0, y = 0},
-		{point = "TOP", file = "AUCTION-TOP", w = 320, h = 256, x = 256, y = 0},
-		{point = "TOPRIGHT", file = "AUCTION-TOPRIGHT", w = 256, h = 256, x = 0, y = 0, anchor = "TOP"},
-		{point = "BOTTOMLEFT", file = "BID-BOTLEFT", w = 256, h = 256, x = 0, y = -256},
-		{point = "BOTTOM", file = "AUCTION-BOT", w = 320, h = 256, x = 256, y = -256},
-		{point = "BOTTOMRIGHT", file = "BID-BOTRIGHT", w = 256, h = 256, x = 0, y = 0, anchor = "BOTTOM"},
-	}
-
-	for k, v in pairs(self.textures) do
-		self[v.point] = self:CreateTexture(nil, "BACKGROUND")
-		self[v.point]:SetSize(v.w, v.h)
-		self[v.point]:SetTexture("Interface\\AUCTIONFRAME\\UI-AUCTIONFRAME-" .. v.file .. ".BLP")
-		if v.anchor then
-			self[v.point]:SetPoint("TOPLEFT", self[v.anchor], "TOPRIGHT", v.x, v.y)
-		else
-			self[v.point]:SetPoint("TOPLEFT", v.x, v.y)
-		end
+		Frame.DeleteBTN:Enable()
+		Frame.ExportBTN:Enable()
 	end
 
-	local portrait = self:CreateTexture(nil, "BACKGROUND")
-		  portrait:SetHeight(58)
-		  portrait:SetWidth(58)
-		  portrait:SetPoint("TOPLEFT", 8, -7)
-		  SetPortraitTexture(portrait, "player")
-
-	-- -- TITLE -- --
-	local title_region = self:CreateTitleRegion()
-		  title_region:SetPoint("CENTER", self, "TOP", 0, -30)
-		  title_region:SetSize(832, 45)
-
-	local title = self:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-		  title:SetText(L["Pro-Log Guild"])
-		  title:SetPoint("TOPLEFT", 85, -18)
-	
-	-- -- BUTTONS -- --
-	local close_btn = CreateFrame("Button", nil, self, "UIPanelCloseButton")
-	      close_btn:SetPoint("TOPRIGHT", 3, -8)
-
-	local delete_all = CreateFrame("Button", "delete_all", self, "UIPanelButtonTemplate")
-		  delete_all:SetSize(80, 22)
-		  delete_all:SetText(L["Delete All"])
-		  delete_all:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", -8, 16)
-		  delete_all:SetScript("OnClick", function()
-		  		StaticPopup_Show("PLG_DeleteAllConfirmation")
-		  end)
-		  if events:CountLogs() == 0 and events:CountGuilds() == 0 then delete_all:Disable() end
-
-	local delete_btn = CreateFrame("Button", "delete_btn", self, "UIPanelButtonTemplate")
-		  delete_btn:SetSize(80, 22)
-		  delete_btn:SetText(L["Delete"])
-		  delete_btn:SetPoint("RIGHT", delete_all, "LEFT", 0, 0)
-		  delete_btn:SetScript("OnClick", function()
-		  		StaticPopup_Show("PLG_DeleteConfirmation")
-		  end)
-		  if events:CountLogs() == 0 or not db.Active.log then delete_btn:Disable() end
-	
-	local log_lines = {}
-	local export_btn = CreateFrame("Button", "export_btn", self, "UIPanelButtonTemplate")
-		  export_btn:SetSize(80, 22)
-		  export_btn:SetText(L["Export"])
-		  export_btn:SetPoint("RIGHT", delete_btn, "LEFT", 0, 0)
-		  export_btn:SetScript("OnClick", function()
-		  		local active_page = db.Active.page
-				local active_log = db.Transactions[db.Active.guild][db.Active.log][active_page == "transactions_tab" and "transactions" or "money_transactions"]
-				
-				table.wipe(log_lines)
-
-				for k, v in pairs(active_page == "transactions_tab" and active_log["Tab " .. db.Active.tab] or active_log) do
-					if active_page == "transactions_tab" then
-						log_lines[1] = "type,name,itemLink,count,tab1,tab2,year,month,day,hour,line"
-						local line = ""
-
-						local count = 0
-						for i, t in pairs(v) do
-							count = count + 1
-						end
-
-						local pos = 0
-						for i, t in pairs(v) do
-							pos = pos + 1
-
-							if line == "" then
-								line = t
-							else
-								if count == 8 and pos == 5 then
-									line = line .. ",,," .. t
-								else
-									line = line .. "," .. t
-								end
-							end
-						end
-
-						line = line .. "," .. events:FormatLogMsg(v, "item")
-						log_lines[k + 1] = line
-					else
-						log_lines[1] = "type,name,amount,years,months,days,hours,line"
-						local line  = ""
-
-						for i, t in pairs(v) do
-							if line == "" then
-								line = t
-							else
-								line = line .. "," .. t
-							end
-						end
-						line = line .. "," .. events:FormatLogMsg(v, "money")
-						log_lines[k + 1] = line
-					end
-				end
-
-				events:ExportText(log_lines)
-		  end)
-		  if events:CountLogs() == 0 or not db.Active.log then export_btn:Disable() end
-
-	local copy_btn = CreateFrame("Button", "copy_btn", self)
-		  copy_btn:SetSize(16, 16)  
-		  copy_btn:SetNormalTexture("Interface\\Buttons\\UI-GuildButton-PublicNote-Up.blp")
-		  copy_btn:SetPushedTexture("Interface\\Buttons\\UI-GuildButton-PublicNote-Up.blp")
-		  copy_btn:SetDisabledTexture("Interface\\Buttons\\UI-GuildButton-PublicNote-Disabled.blp")
-	      copy_btn:SetPoint("TOPRIGHT", self, "TOPRIGHT", -15, -45)
-		  copy_btn:SetScript("OnClick", function()
-		  		events:CopyText()
-		  end)
-		  if not db.Active.log then copy_btn:Disable() end
-
-	-- -- TABS -- --
-	self.tabs = {{"transactions_tab", "Item Transactions"}, {"money_tab", "Money Transactions"}, {"settings_tab", "Settings"}, {"help_tab", "Help"}}
-
-	local counter = 0
-	for k, v in pairs(self.tabs) do
-		counter = counter + 1
-		local tab = CreateFrame("Button", v[1], self, "CharacterFrameTabButtonTemplate")
-			  tab:SetText(L[v[2]])
-			  if counter == 1 then
- 					tab:SetPoint("TOPLEFT", self, "BOTTOMLEFT", 25, 12)
-			  else
- 					tab:SetPoint("LEFT", self.tabs[counter - 1][1], "RIGHT", -15, 0)
-			  end
-			  tab:SetScript("OnClick", function()
-			  		self:SelectTab(v[1])
-			  end)
-			  self[v[1]] = tab
-
-		if db.Active.page == v[1] then
-			PanelTemplates_SelectTab(tab)
-		else
-			PanelTemplates_DeselectTab(tab)
-		end
-	end
-
-	-- -- SCROLL FRAME/BAR -- --
-	local scrollframe = CreateFrame("ScrollFrame", "scrollframe", self, "UIPanelScrollFrameTemplate")
-		  scrollframe:SetSize(770, 325)
-		  scrollframe:SetPoint("TOPLEFT", 25, -78)
-
-	scrollframe.ScrollBar:EnableMouseWheel(true)
-	scrollframe.ScrollBar:SetScript("OnMouseWheel", function(self, direction)
-		ScrollFrameTemplate_OnMouseWheel(scrollframe, direction)
-	end)
-
-	local scrollframebg = scrollframe:CreateTexture(nil, "BACKGROUND", nil, -6)
-		  scrollframebg:SetPoint("TOP")
-		  scrollframebg:SetPoint("RIGHT", 25, 0)
-		  scrollframebg:SetPoint("BOTTOM")
-		  scrollframebg:SetWidth(26)
-		  scrollframebg:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-ScrollBar.blp")
-		  scrollframebg:SetTexCoord(0, 0.45, 0.1640625, 1)
-		  scrollframebg:SetAlpha(0.5)
-
-	local content = CreateFrame("Frame", nil, scrollframe)
-		  content:SetSize(scrollframe:GetWidth(), scrollframe:GetHeight())
-	
-	scrollframe:SetScrollChild(content)
-	self.scrollframe = scrollframe
-	self.content = content
-
-	self:SetSize(832, 447)
-	self:SetPoint("CENTER", 0, 0)
-	self:Show()
-
-	-- -- DROPDOWNS: LOGS -- --
-	local log_dropdown = CreateFrame("Frame", "log_dropdown", self, "UIDropDownMenuTemplate")
-		  UIDropDownMenu_SetWidth(log_dropdown, 175)
-		  UIDropDownMenu_SetText(log_dropdown, db["Active"].log or L["Select a log..."])
-		  log_dropdown:SetPoint("TOPRIGHT", self, "TOPRIGHT", -25, -40)
-		  db.log_dropdown = log_dropdown
-
-	-- Set Values
-	function log_dropdown:SetValue(selected)
-		db["Active"].log = selected
-		UIDropDownMenu_SetText(log_dropdown, db["Active"].log)
-
-		if db["Active"].page == "transactions_tab" then
-			events:DisplayTransactions("Tab 1")
-			events:ResetGuildTabs()
-		elseif db["Active"].page == "money_tab" then
-			events:DisplayMoneyTransactions()
-			events:ResetGuildTabs()
+	if not db.ActiveLog or db.ActivePage ~= "TransactionsTab" then
+		if db.ActivePage ~= "MoneyTab" then
+			Frame.CopyBTN:Disable()
+			Frame.ExportBTN:Disable()
 		end
 
-		events:RefreshButtons()
-
-		CloseDropDownMenus()
-	end
-
-	-- -- DROPDOWNS: GUILDS -- --
-	local guild_dropdown = CreateFrame("Frame", "guild_dropdown", self, "UIDropDownMenuTemplate")
-		  UIDropDownMenu_SetWidth(guild_dropdown, 175)
-		  UIDropDownMenu_SetText(guild_dropdown, db["Active"].guild or L["Select a guild..."])
-		  guild_dropdown:SetPoint("TOPRIGHT", log_dropdown, "TOPLEFT", 20, 0)
-
-	UIDropDownMenu_Initialize(guild_dropdown, function(self, level, menuList)
-		local info = UIDropDownMenu_CreateInfo()
-		if (level or 1) == 1 then
-			info.func = self.SetValue
-
-			for k, v in events:pairsByKeys(db.Transactions) do
-				info.text, info.arg1, info.menuList = k, k, k
-				info.checked, info.hasArrow = db["Active"].guild == k, false
-				UIDropDownMenu_AddButton(info)
-			end
+		for i = 1, MAX_GUILDBANK_TABS do
+			Frame["GuildTabBTNs" .. i]:Disable()
 		end
-	end)
-
-	-- Set Values
-	function guild_dropdown:SetValue(selected)
-		db["Active"].guild = selected
-		UIDropDownMenu_SetText(guild_dropdown, db["Active"].guild)
-
-		if db["Active"].log then
-			db["Active"].log = false
-			UIDropDownMenu_SetText(log_dropdown, L["Select a log..."])
-		end
-
-		UIDropDownMenu_Initialize(log_dropdown, function(self, level, menuList)
-			local info = UIDropDownMenu_CreateInfo()
-			if (level or 1) == 1 then
-				info.func = self.SetValue
-
-				if db.Transactions[selected] then
-					for k, v in events:pairsByKeys(db.Transactions[selected]) do
-						info.text, info.arg1, info.menuList = k, k, k
-						info.checked, info.hasArrow = db["Active"].log == k, false
-						UIDropDownMenu_AddButton(info)
-					end
-				end
-			end
-		end)
-
-		db["Active"].tab = 1
-		events:ResetGuildTabs()
-		events:RefreshButtons()
-		events:ClearLogLines()
-
-		CloseDropDownMenus()
-	end
-
-	-- -- TABS: TOP GUILD TAB BUTTONS -- --
-	for i = 1, 8 do
-		local tab = CreateFrame("Button", "guild_tabs_" .. i, self, "OptionsFrameTabButtonTemplate")
-			  tab:SetText(i)
-			  tab:Disable()
-			  tab:SetScript("OnClick", function(self)
-			  		db["Active"].tab = i
-			  		events:DisplayTransactions("Tab " .. i)
-			  		events:ResetGuildTabs()
-			  end)
-			  events["guild_tabs_" .. i] = tab
-		
-		PanelTemplates_TabResize(tab, 0)
-
-		if i == 1 then
-			tab:SetPoint("TOPLEFT", 70, -45)
-		else
-			tab:SetPoint("TOPLEFT", "guild_tabs_" .. (i - 1), "TOPRIGHT", -10, 0)
-		end
-	end
-
-	loaded = true
-end
-
--- -- -- -- -- FUNCTIONS: SELECT TAB -- -- -- -- --
-function events:SelectTab(tab)
-	local self = events
-
-	for k, v in pairs(self.tabs) do
-		PanelTemplates_DeselectTab(self[v[1]])
-	end
-
-	PanelTemplates_SelectTab(self[tab])
-
-	db.Active.page = tab
-
-	events:ClearLogLines()
-	events:ClearSettingsElements()
-	events:ClearHelpElements()
-	
-	if tab == "transactions_tab" then
-		if db["Active"].log and db["Active"].tab then
-			events:DisplayTransactions("Tab " .. db["Active"].tab)
-		end
-	elseif tab == "money_tab" then
-		if db["Active"].log then
-			events:DisplayMoneyTransactions()
-		end
-	elseif tab == "settings_tab" then
-		events:DisplaySettings()
-	elseif tab == "help_tab" then
-		events:DisplayHelp()
-	end
-
-	events:ResetGuildTabs()
-end
-
--- -- -- -- -- FUNCTIONS: COUNT LOGS -- -- -- -- --
-function events:CountLogs()
-	local counter = 0
-
-	for k, v in pairs(db.Transactions) do
-		for n in pairs(v) do
-			counter = counter + 1
-		end
-	end
-
-	return counter
-end
-
--- -- -- -- -- FUNCTIONS: COUNT GUILDS -- -- -- -- --
-function events:CountGuilds()
-	local counter = 0
-
-	for k, v in pairs(db.Transactions) do
-		counter = counter + 1
-	end
-
-	return counter
-end
-
--- -- -- -- -- FUNCTIONS: GET MAX TABS -- -- -- -- --
-function events:GetMaxTabs()
-	local i = 0
-	for k, v in events:pairsByKeys(db.Transactions[db["Active"].guild][db["Active"].log].transactions) do
-		i = i + 1
-	end
-	return i
-end
-
--- -- -- -- -- FUNCTIONS: RESET GUILD TABS -- -- -- -- --
-function events:ResetGuildTabs()
-	local x = (db["Active"].log and db["Active"].page == "transactions_tab") and events:GetMaxTabs()
-
-	for i = 1, 8 do
-		events["guild_tabs_" .. i]:Disable()
-	end
-	if x then
-		for i = 1, x do
-			events["guild_tabs_" .. i]:Enable()
-		end
-	end
-
-	if db["Active"].tab then
-		events:HighlightGuildTab(db["Active"].tab)
-	end
-end
-
--- -- -- -- -- FUNCTIONS: HIGHLIGHT SELECTED GUILD TAB -- -- -- -- --
-function events:HighlightGuildTab(x)
-	events["guild_tabs_" .. db["Active"].tab]:Enable()
-	events["guild_tabs_" .. x]:Disable()
-
-	db["Active"].tab = x
-end
-
--- -- -- -- -- FUNCTIONS: CLEAR LOG LINES -- -- -- -- --
-function events:ClearLogLines()
-	for i = 1, 26 do
-		if events.content["line_" .. i] then
-			events.content["line_" .. i]:SetFontObject("GameFontHighlight")
-			events.content["line_" .. i]:ClearAllPoints()
-			events.content["line_" .. i]:SetText()
-			events.content["line_" .. i]:Hide()
-		end
-	end
-end
-
--- -- -- -- -- FUNCTIONS: CLEAR SETTINGS -- -- -- -- --
-function events:ClearSettingsElements()
-	if events.settings then
-		for k, v in pairs(events.settings) do
-			v:ClearAllPoints()
-			v:Hide()
-		end
-	end
-end
-
--- -- -- -- -- FUNCTIONS: CLEAR HELP -- -- -- -- --
-function events:ClearHelpElements()
-	if events.help then
-		for k, v in pairs(events.help) do
-			v:ClearAllPoints()
-			v:Hide()
-		end
-	end
-end
-
-local first_scan = true
-
--- -- -- -- -- FUNCTIONS: SCAN LOGS -- -- -- -- --
-function events:ScanLogs()
-	local self = events
-
-	print(addon_prefix .. L["Beginning scan. Do not leave the bank until finished."])
-
-	ns.scan_btn:Disable()
-	StaticPopup_Show("PLG_Scanning")
-
-	self:RegisterEvent("GUILDBANKLOG_UPDATE")
-
-	query_counter = 0
-	max_tabs = GetNumGuildBankTabs()
-
-	guild = GetGuildInfo("player")
-	date_str = date("%m/%d/%Y %H:%M:%S")
-
-	db.Transactions[guild] = db.Transactions[guild] or {}
-	db.Transactions[guild][date_str] = {transactions = {}, money_transactions = {}}
-
-	db["Active"].page = "transactions_tab"
-	db["Active"].tab = 1
-
-	log_table = db.Transactions[guild][date_str]
-
-	for i = 1, MAX_GUILDBANK_TABS do
-		-- GuildBankFrameTab2:Click()
-		SetCurrentGuildBankTab(i)
-		QueryGuildBankLog(i)
-	end
-
-	QueryGuildBankLog(MAX_GUILDBANK_TABS + 1)
-end
-
--- -- -- -- -- HOOKS: GUILDBANKLOG_UPDATE -- -- -- -- --
-events:HookScript("OnEvent", function(self, event, ...)
-	if event ~= "GUILDBANKLOG_UPDATE" then return end
-
-    query_counter = query_counter + 1
-
-	if first then
-		if query_counter == max_tabs + 1 then
-    		query_counter = 0
-    		first = nil
-
-    		QueryGuildBankLog(1)
-    	elseif query_counter <= max_tabs then
-    		QueryGuildBankLog(query_counter)
-    	end
 	else
-    	if query_counter == max_tabs + 1 then
-    		local num_transactions = GetNumGuildBankMoneyTransactions()
-    		
-    		for i = 1, num_transactions do
-    			log_table.money_transactions[(num_transactions + 1) - i] = {GetGuildBankMoneyTransaction(i)}
-    		end
+		Frame.CopyBTN:Enable()
+		Frame.ExportBTN:Enable()
 
-    		events:UnregisterEvent("GUILDBANKLOG_UPDATE")
-
-    		scan_btn:Enable()
-			StaticPopup_Hide("PLG_Scanning")
-
-			print(addon_prefix .. L["Scan finished."])
-
-			guild_dropdown:SetValue(guild)
-			log_dropdown:SetValue(date_str)
-
-			events:Show()
-
-			first_scan = nil
-    	elseif query_counter <= max_tabs then
-    		local num_transactions = GetNumGuildBankTransactions(query_counter)
-    		
-    		log_table.transactions["Tab " .. query_counter] = {}
-
-    		for i = 1, num_transactions do
-    			log_table.transactions["Tab " .. query_counter][(num_transactions + 1) - i] = {GetGuildBankTransaction(query_counter, i)}
-    		end
-    		
-    		QueryGuildBankLog(query_counter)
-    	end
-    end
-end)
-
--- -- -- -- -- FUNCTIONS: REFRESH BUTTONS -- -- -- -- --
-function events:RefreshButtons()
-	local self = events
-
-	if self:CountLogs() == 0 then
-		if events:CountGuilds() == 0 then
-			delete_all:Disable()
-		end
-		delete_btn:Disable()
-		export_btn:Disable()
-		copy_btn:Disable()
-	elseif not db.Active.log then
-		delete_all:Enable()
-		delete_btn:Disable()
-		export_btn:Disable()
-		copy_btn:Disable()
-	else
-		delete_all:Enable()
-		delete_btn:Enable()
-		export_btn:Enable()
-		copy_btn:Enable()
-	end
-end
-
--- -- -- -- -- FUNCTIONS: FORMAT LOG -- -- -- -- --
-function events:FormatLogMsg(log, log_type, copy)
-	local msg
-	local type = log[1]
-	local name = log[2]
-
-	if not name then
-		name = UNKNOWN
-	end
-
-	name = NORMAL_FONT_COLOR_CODE .. name .. FONT_COLOR_CODE_CLOSE
-
-	if log_type == "money" then
-		local money
-		local amount = log[3]
-		local year = log[4]
-		local month = log[5]
-		local day = log[6]
-		local hour = log[7]
-
-		money = GetDenominationsFromCopper(amount)
-
-		if type == "deposit" then
-			msg = format(GUILDBANK_DEPOSIT_MONEY_FORMAT, name, money)
-		elseif type == "withdraw" then
-			msg = format(GUILDBANK_WITHDRAW_MONEY_FORMAT, name, money)
-		elseif type == "repair" then
-			msg = format(GUILDBANK_REPAIR_MONEY_FORMAT, name, money)
-		elseif type == "withdrawForTab" then
-			msg = format(GUILDBANK_WITHDRAWFORTAB_MONEY_FORMAT, name, money)
-		elseif type == "buyTab" then
-			if amount > 0 then
-				msg = format(GUILDBANK_BUYTAB_MONEY_FORMAT, name, money)
+		for i = 1, MAX_GUILDBANK_TABS do
+			if i <= db.Transactions[db.ActiveGuild][db.ActiveLog].MaxTabs and i ~= db.ActiveTab then
+				Frame["GuildTabBTNs" .. i]:Enable()
 			else
-				msg = format(GUILDBANK_UNLOCKTAB_FORMAT, name)
-			end
-		elseif type == "depositSummary" then
-			msg = format(GUILDBANK_AWARD_MONEY_SUMMARY_FORMAT, money)
-		end
-
-		msg = msg .. GUILD_BANK_LOG_TIME_PREPEND .. format(GUILD_BANK_LOG_TIME, RecentTimeDate(year, month, day, hour))
-	elseif log_type == "item" then
-		local itemLink = log[3]
-		local count = log[4]
-		local tab1 = log[5]
-		local tab2 = log[6]
-		local year = log[7]
-		local month = log[8]
-		local day = log[9]
-		local hour = log[10]
-
-		if type == "deposit" then
-			msg = format(GUILDBANK_DEPOSIT_FORMAT, name, itemLink)
-			if count > 1 then
-				msg = msg .. format(GUILDBANK_LOG_QUANTITY, count)
-			end
-		elseif type == "withdraw" then
-			msg = format(GUILDBANK_WITHDRAW_FORMAT, name, itemLink)
-			if count > 1 then
-				msg = msg .. format(GUILDBANK_LOG_QUANTITY, count)
-			end
-		elseif type == "move" then
-			msg = format(GUILDBANK_MOVE_FORMAT, name, itemLink, count, "tab " .. tab1, "tab " .. tab2)
-		end
-
-		msg = msg .. GUILD_BANK_LOG_TIME_PREPEND .. format(GUILD_BANK_LOG_TIME, RecentTimeDate(year, month, day, hour))
-	end
-
-	return msg
-end
-
--- -- -- -- -- FUNCTIONS: DISPLAY LOGS: TRANSACTIONS -- -- -- -- --
-function events:DisplayTransactions(tab)
-	events:ClearLogLines()
-	events:ClearSettingsElements()
-	events:ClearHelpElements()
-
-	local i = 1
-
-	events.content["line_" .. i] = events.content["line_" .. i] or events.content:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-	local line = events.content["line_" .. i]
-		  line:SetText(L[tab])
-		  line:SetWidth(events.content:GetWidth() - 20)
-		  line:SetWordWrap(true)
-		  line:SetFontObject("GameFontNormalLarge")
-		  line:SetJustifyH("LEFT")
-		  line:Show()
-		  line:SetPoint("TOPLEFT", 10, -10)
-
-	for k, v in pairs(db.Transactions[db["Active"].guild][db["Active"].log].transactions[tab]) do
-		i = i + 1
-		local msg = events:FormatLogMsg(v, "item")
-
-		events.content["line_" .. i] = events.content["line_" .. i] or events.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-		local line = events.content["line_" .. i]
-			  line:SetText(msg)
-			  line:SetWidth(events.content:GetWidth() - 20)
-			  line:SetWordWrap(true)
-			  line:SetJustifyH("LEFT")
-			  line:Show()
-			  line:SetPoint("TOPLEFT", events.content["line_" .. i - 1], "BOTTOMLEFT", 0, -5)
-	end
-
-	events:HighlightGuildTab(string.gsub(tab, "Tab ", ""))
-end
-
--- -- -- -- -- FUNCTIONS: DISPLAY LOGS: MONEY TRANSACTIONS -- -- -- -- --
-function events:DisplayMoneyTransactions()
-	events:ClearLogLines()
-	events:ClearSettingsElements()
-	events:ClearHelpElements()
-
-	local i = 0
-	for k, v in pairs(db.Transactions[db["Active"].guild][db["Active"].log].money_transactions) do
-		i = i + 1
-		local msg = events:FormatLogMsg(v, "money")
-
-		events.content["line_" .. i] = events.content["line_" .. i] or events.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-		local line = events.content["line_" .. i]
-			  line:SetText(msg)
-			  line:SetWidth(events.content:GetWidth() - 20)
-			  line:SetWordWrap(true)
-			  line:SetJustifyH("LEFT")
-			  line:Show()
-
-		if i == 1 then
-			line:SetPoint("TOPLEFT", 10, -10)
-		else
-			line:SetPoint("TOPLEFT", events.content["line_" .. i - 1], "BOTTOMLEFT", 0, -5)
-		end
-	end
-end
-
--- -- -- -- -- FUNCTIONS: DISPLAY SETTINGS -- -- -- -- --
-function events:DisplaySettings()
-	events:ClearLogLines()
-	events:ClearSettingsElements()
-	events:ClearHelpElements()
-
-	events.settings = events.settings or {}
-
-	events.settings["description"] = events.settings["description"] or events.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-	local desc = events.settings["description"]
-		  desc:SetText(L["There are currently no settings available to change. If you have a request, please leave a comment on WoW Interface or Curse or email me at addons@niketa.net."])
-		  desc:SetWidth(events.content:GetWidth() - 20)
-		  desc:SetWordWrap(true)
-		  desc:SetJustifyH("LEFT")
-		  desc:Show()
-		  desc:SetPoint("TOPLEFT", 10, -10)
-end
-
--- -- -- -- -- FUNCTIONS: DISPLAY HELP -- -- -- -- --
-function events:DisplayHelp()
-	events:ClearLogLines()
-	events:ClearSettingsElements()
-	events:ClearHelpElements()
-
-	events.help = events.help or {}
-
-	events.help["description"] = events.help["description"] or events.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-	local desc = events.help["description"]
-		  desc:SetText(L["If you need assistance with the addon, please leave a comment on either WoW Interface or Curse or email me at addons@niketa.net. If there are any questions coming in, I will add them to this section for others to reference."])
-		  desc:SetWidth(events.content:GetWidth() - 20)
-		  desc:SetWordWrap(true)
-		  desc:SetJustifyH("LEFT")
-		  desc:Show()
-		  desc:SetPoint("TOPLEFT", 10, -10)
-end
-
--- -- -- -- -- FUNCTIONS: COPY TEXT -- -- -- -- --
-function events:CopyText()
-	if db["Active"].page ~= "transactions_tab" and db["Active"].page ~= "money_tab" then
-		return false
-	end
-
-	local msg = ""
-
-	for i = 1, 25 do
-		if events.content["line_" .. i] then
-			if events.content["line_" .. i]:GetText() ~= "" then
-				msg = msg ~= "" and msg .. "\n" .. events.content["line_" .. i]:GetText() or events.content["line_" .. i]:GetText()
+				Frame["GuildTabBTNs" .. i]:Disable()
 			end
 		end
 	end
 
-	if not events.copy_frame then
-		events.copy_frame = CreateFrame("Frame", "copy_frame", UIParent)
-		local frame = events.copy_frame
-			  frame:SetPoint("CENTER", 0, 50)
-			  frame:SetSize(450, 340)
-			  frame:SetToplevel(true)
-			  frame:SetFrameStrata("HIGH")
-			  frame:EnableMouse(true)
-			  frame:SetMovable(true)
-			  frame:SetBackdrop({
-			  		bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-			  		edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-			  		edgeSize = 25,
-			  		insets = {
-				  		left = 8,
-				  		right = 8,
-				  		top = 8,
-				  		bottom = 8
-				  	}
-			  })
-
-		events.copy_scrollframe = CreateFrame("ScrollFrame", "copy_scrollframe", frame, "UIPanelScrollFrameTemplate")
-		local copy_scrollframe = events.copy_scrollframe
-		copy_scrollframe:SetSize(375, 250)
-		copy_scrollframe:SetPoint("TOP", 0, -30)
-	    copy_scrollframe.ScrollBar:EnableMouseWheel(true)
-	    copy_scrollframe.ScrollBar:SetScript("OnMouseWheel", function(self, direction)
-	        ScrollFrameTemplate_OnMouseWheel(copy_scrollframe, direction)
-	    end)
-
-		local ScrollContent = CreateFrame("Frame", nil, copy_scrollframe)
-		ScrollContent:SetSize(copy_scrollframe:GetWidth(), copy_scrollframe:GetHeight())
-
-		copy_scrollframe.ScrollContent = ScrollContent
-		copy_scrollframe:SetScrollChild(ScrollContent)
-
-		events.copy_editbox = CreateFrame("Editbox", "copy_editbox", ScrollContent)
-		local copy_editbox = events.copy_editbox
-			  copy_editbox:SetAllPoints(ScrollContent)
-			  copy_editbox:SetFontObject(GameFontHighlightSmall)
-			  copy_editbox:SetAutoFocus(true)
-			  copy_editbox:SetMultiLine(true)
-			  copy_editbox:SetMaxLetters(9000)
-			  copy_editbox:SetScript("OnEscapePressed", function(this)
-				  this:SetText("")
-				  this:ClearFocus()
-				  events.copy_frame:Hide()
-			  end)
-
-		local copy_close = CreateFrame("Button", "copy_close", frame, "UIPanelButtonTemplate")
-			  copy_close:SetSize(150, 25)
-			  copy_close:SetText(L["Close"])
-			  copy_close:SetPoint("TOP", copy_scrollframe, "BOTTOM", 0, -15)
-			  copy_close:SetScript("OnClick", function(self)
-			  		events.copy_frame:Hide()
-			  end)
+	if Frame:CountLogs() == 0 and Frame:CountLogs("ALL_GUILDS") == 0 then
+		Frame.DeleteAllBTN:Disable()
+	else
+		Frame.DeleteAllBTN:Enable()
 	end
 
-	events.copy_editbox:SetText(msg)
-	events.copy_editbox:SetFocus()
-	events.copy_editbox:HighlightText()
-	events.copy_frame:Show()
+	if not db.ActiveGuild then
+		UIDropDownMenu_DisableDropDown(Frame.LogDROP)
+	else
+		UIDropDownMenu_EnableDropDown(Frame.LogDROP)
+	end
 end
 
--- -- -- -- -- FUNCTIONS: Export TEXT -- -- -- -- --
-function events:ExportText(lines)
-	if db["Active"].page ~= "transactions_tab" and db["Active"].page ~= "money_tab" then
-		return false
+-- /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
+function Frame:ScanLogs()
+	local num_transactions, type, name, amount, itemLink, count, tab1, tab2, year, month, day, hour
+	local guild = GetGuildInfo("player")
+	local datetime = date("%m/%d/%Y %H:%M:%S")
+	
+	db.Transactions[guild] = db.Transactions[guild] or {}
+	db.Transactions[guild][datetime] = {}
+
+	local log_table = db.Transactions[guild][datetime]
+	log_table.MaxTabs = GetNumGuildBankTabs()
+
+	local tabs = log_table.MaxTabs + 1
+
+	for tab = 1, tabs do
+		num_transactions = tab < tabs and GetNumGuildBankTransactions(tab) or GetNumGuildBankMoneyTransactions()
+
+		log_table["tab" .. tab] = {
+			name = GetGuildBankTabInfo(tab),
+			transactions = {}
+		}
+
+		local tab_table = log_table["tab" .. tab]["transactions"]
+		for i = num_transactions, 1, -1 do
+			if tab < tabs then
+				type, name, itemLink, count, tab1, tab2, year, month, day, hour = GetGuildBankTransaction(tab, i)
+
+				local tab1_name = tab1 and GetGuildBankTabInfo(tab1)
+				local tab2_name = tab2 and GetGuildBankTabInfo(tab2)
+
+				name = name or (UNKNOWN or "Unknown")
+				tab1 = tab1 and {tab1, tab1_name} or 0
+				tab2 = tab2 and {tab2, tab2_name} or 0
+
+				table.insert(tab_table, {type, name, itemLink, count, tab1, tab2, year, month, day, hour})
+			else
+				type, name, amount, year, month, day, hour = GetGuildBankMoneyTransaction(i)
+
+				name = name or (UNKNOWN or "Unknown")
+
+				table.insert(tab_table, {type, name, amount, year, month, day, hour})
+			end
+		end
 	end
 
-	local msg = ""
+	Frame.ScanBTN:Enable()
+	Frame:Print("Scan finished!")
 
-	for k, v in pairs(lines) do
-		msg = msg ~= "" and msg .. "\n" .. v or v
+	if db.Settings.ShowAfterScan then
+		Frame:CreateFrame(Frame)
+		Frame:SetLog(guild, datetime)
 	end
-
-	if not events.export_frame then
-		events.export_frame = CreateFrame("Frame", "export_frame", UIParent)
-		local frame = events.export_frame
-			  frame:SetPoint("CENTER", 0, 50)
-			  frame:SetSize(450, 450)
-			  frame:SetToplevel(true)
-			  frame:SetFrameStrata("HIGH")
-			  frame:EnableMouse(true)
-			  frame:SetMovable(true)
-			  frame:SetBackdrop({
-			  		bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-			  		edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-			  		edgeSize = 25,
-			  		insets = {
-				  		left = 8,
-				  		right = 8,
-				  		top = 8,
-				  		bottom = 8
-				  	}
-			  })
-
-		events.export_scrollframe = CreateFrame("ScrollFrame", "export_scrollframe", frame, "UIPanelScrollFrameTemplate")
-		local export_scrollframe = events.export_scrollframe
-		export_scrollframe:SetSize(375, 250)
-		export_scrollframe:SetPoint("TOP", 0, -30)
-	    export_scrollframe.ScrollBar:EnableMouseWheel(true)
-	    export_scrollframe.ScrollBar:SetScript("OnMouseWheel", function(self, direction)
-	        ScrollFrameTemplate_OnMouseWheel(export_scrollframe, direction)
-	    end)
-
-		local ScrollContent = CreateFrame("Frame", nil, export_scrollframe)
-		ScrollContent:SetSize(export_scrollframe:GetWidth(), export_scrollframe:GetHeight())
-
-		export_scrollframe.ScrollContent = ScrollContent
-		export_scrollframe:SetScrollChild(ScrollContent)
-
-		events.export_editbox = CreateFrame("Editbox", "export_editbox", ScrollContent)
-		local export_editbox = events.export_editbox
-			  export_editbox:SetAllPoints(ScrollContent)
-			  export_editbox:SetFontObject(GameFontHighlightSmall)
-			  export_editbox:SetAutoFocus(true)
-			  export_editbox:SetMultiLine(true)
-			  export_editbox:SetMaxLetters(9000)
-			  export_editbox:SetScript("OnEscapePressed", function(this)
-				  this:SetText("")
-				  this:ClearFocus()
-				  events.export_frame:Hide()
-			  end)
-
-		local export_txt = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-			  export_txt:SetText("INSTRUCTIONS: Copy and paste the above text into any text editor (such as Notepad). Save the file with a \".csv\" extension. If necessary, make sure that you change the file type to \"All Files\" before saving with this extension. For example, in Notepad, if you skip this text you will end up with a normal text file called \"file.csv.txt\". You can open this CSV file in Excel.")
-			  export_txt:SetPoint("TOP", export_scrollframe, "BOTTOM", 0, -15)
-			  export_txt:SetWidth(375)
-			  export_txt:SetJustifyH("LEFT")
-			  export_txt:SetWordWrap(true)
-
-		local export_close = CreateFrame("Button", "export_close", frame, "UIPanelButtonTemplate")
-			  export_close:SetSize(150, 25)
-			  export_close:SetText(L["Close"])
-			  export_close:SetPoint("TOP", export_txt, "BOTTOM", 0, -15)
-			  export_close:SetScript("OnClick", function(self)
-			  		events.export_frame:Hide()
-			  end)
-	end
-
-	events.export_editbox:SetText(msg)
-	events.export_editbox:SetFocus()
-	events.export_editbox:HighlightText()
-	events.export_frame:Show()
 end
 
--- -- -- -- -- STATIC POPUPS: DELETE ALL -- -- -- -- --
+-- /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
+function Frame:SelectTab(tab)
+	for k, v in pairs(Frame.TabButtons) do
+		PanelTemplates_DeselectTab(v)
+	end	
+
+	PanelTemplates_SelectTab(Frame.TabButtons[tab])
+
+	for k, v in pairs(Frame.ScrollContentFrames) do
+		v:Hide()
+		for a, b in pairs(v.Elements) do
+			b:ClearAllPoints()
+			b:Hide()
+		end
+	end
+
+	db.ActivePage = tab
+	Frame.ScrollFrame:SetScrollChild(self.ScrollContentFrames[tab])
+	self.ScrollContentFrames[tab]:Show()
+
+	if tab == "TransactionsTab" then
+		Frame:LoadLogs(db.ActiveTab or 1)
+	elseif tab == "MoneyTab" then
+		Frame:LoadLogs()
+	end
+
+	Frame:RefreshButtons()
+end
+
+-- /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
+function Frame:SetLog(guild, log)
+	if guild == "CLEARCODE" then
+		if db.ActiveGuild then
+			db.ActiveGuild = false
+			UIDropDownMenu_SetText(Frame.GuildDROP, "Select a guild...")
+		end
+
+		if db.ActiveLog then
+			db.ActiveLog = false
+			UIDropDownMenu_SetText(Frame.LogDROP, "Select a log...")
+		end
+
+		db.ActiveTab = false
+
+		for k, v in pairs(self.ScrollContentFrames) do
+			for a, b in pairs(v.Elements) do
+				b:ClearAllPoints()
+				b:Hide()
+			end
+		end
+	else
+		db.ActiveGuild = guild
+		db.ActiveLog = log
+
+		Frame.GuildDROP:SetValue(guild)
+		Frame.LogDROP:SetValue(log)
+
+		if db.ActivePage == "TransactionsTab" then
+			Frame:LoadLogs(1)
+		elseif db.ActivePage == "MoneyTab" then
+			Frame:LoadLogs()
+		end
+	end
+end
+
+-- /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
 StaticPopupDialogs["PLG_DeleteAllConfirmation"] = {
-  text = L["Are you sure you want to delete all logs?"],
-  button1 = L["Delete"],
-  button2 = L["Cancel"],
-  OnAccept = function()
-      table.wipe(db.Transactions)
-	  print(addon_prefix .. L["All logs have been deleted."])
-	  if db["Active"].guild then
-	  		db["Active"].guild = false
-	  		UIDropDownMenu_SetText(guild_dropdown, L["Select a guild..."])
-	  end
-	  if db["Active"].log then
-	  		db["Active"].log = false
-	  		UIDropDownMenu_SetText(log_dropdown, L["Select a log..."])
-	  end
-	  events:ClearLogLines()
-	  events:ResetGuildTabs()
-	  events:RefreshButtons()
-  end,
-  whileDead = true,
-  hideOnEscape = true
+	text = "Are you sure you want to delete all logs?",
+	button1 = "Delete",
+	button2 = "Cancel",
+	OnAccept = function()
+		table.wipe(db.Transactions)
+
+		Frame:Print(Frame:CountLogs("ALL_GUILDS") == 0 and "All logs have been deleted." or "There was a problem deleting all of your logs.")
+
+		Frame:SetLog("CLEARCODE")
+		Frame:RefreshButtons()
+	end,
+	whileDead = true,
+	hideOnEscape = true
 }
 
--- -- -- -- -- STATIC POPUPS: DELETE -- -- -- -- --
 StaticPopupDialogs["PLG_DeleteConfirmation"] = {
-  text = L["Are you sure you want to delete this log?"],
-  button1 = L["Delete"],
-  button2 = L["Cancel"],
-  OnAccept = function()
-      db.Transactions[db["Active"].guild][db["Active"].log] = nil
-	  print(addon_prefix .. L["The log has been deleted."])
-	  if db["Active"].log then
-	  		db["Active"].log = false
-	  		UIDropDownMenu_SetText(log_dropdown, L["Select a log..."])
-	  end
-	  db["Active"].tab = 1
-	  events:ClearLogLines()
-	  events:ResetGuildTabs()
-	  events:RefreshButtons()
-  end,
-  whileDead = true,
-  hideOnEscape = true
+	text = "Are you sure you want to delete this log?",
+	button1 = "Delete",
+	button2 = "Cancel",
+	OnAccept = function()
+		db.Transactions[db.ActiveGuild][db.ActiveLog] = nil
+		if Frame:CountLogs(db.ActiveGuild) == 0 then
+			db.Transactions[db.ActiveGuild] = nil
+		end
+
+		Frame:Print((not db.Transactions[db.ActiveGuild] or not db.Transactions[db.ActiveGuild][db.ActiveLog]) and "The log has been deleted." or "There was a problem deleting the log.")
+
+		Frame:SetLog("CLEARCODE")
+		Frame:RefreshButtons()
+	end,
+	whileDead = true,
+	hideOnEscape = true
 }
 
--- -- -- -- -- STATIC POPUPS: SCAN STATUS -- -- -- -- --
-StaticPopupDialogs["PLG_Scanning"] = {
-  text = L["Scanning bank. Please wait... (If this process is taking too long - 15+ sec, you can try the following: cancel and scan again, click through some of the bank logs to expedite the process, or reload your UI.)"],
-  button2 = "Cancel",
-  OnCancel = function()
-    events:UnregisterEvent("GUILDBANKLOG_UPDATE")
-	first_scan = nil
-	ns.scan_btn:Enable()
-  end,
-  whileDead = true,
-  hideOnEscape = false
-}
+-- /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
+SLASH_PROLOGGUILD1 = "/plg"
+
+function SlashCmdList.PROLOGGUILD(msg)
+	Frame:CreateFrame(Frame)
+end
