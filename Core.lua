@@ -752,6 +752,10 @@ end
 local first = true
 
 function Frame:GUILDBANKBAGSLOTS_CHANGED(...)
+	if (has_bagnon and not BagnonFrameguildbank:IsVisible()) and not GuildBankFrame:IsVisible() or Frame.ScanBTN then
+		return
+	end
+
 	local parent = has_bagnon and (BagnonFrameguildbank.brokerDisplay or BagnonFrameguildbank) or GuildBankFrame
 	local point = has_bagnon and {"CENTER", BagnonFrameguildbank, "BOTTOM", 0, 17} or {"BOTTOMLEFT", GuildBankFrame, "BOTTOMLEFT", 11, 31}
 
