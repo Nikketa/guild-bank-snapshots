@@ -752,7 +752,7 @@ end
 local first = true
 
 function Frame:GUILDBANKBAGSLOTS_CHANGED(...)
-	if (has_bagnon and not BagnonFrameguildbank:IsVisible()) and not GuildBankFrame:IsVisible() or Frame.ScanBTN then
+	if (has_bagnon and not BagnonFrameguildbank:IsVisible()) or not GuildBankFrame:IsVisible() or Frame.ScanBTN then
 		return
 	end
 
