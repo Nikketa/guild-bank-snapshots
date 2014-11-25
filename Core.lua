@@ -10,7 +10,8 @@ Frame:SetScript("OnEvent", function(self, event, ...)
 end)
 
 Frame:RegisterEvent("ADDON_LOADED")
-Frame:RegisterEvent("GUILDBANKBAGSLOTS_CHANGED")
+-- Frame:RegisterEvent("GUILDBANKBAGSLOTS_CHANGED")
+Frame:RegisterEvent("GUILDBANKFRAME_OPENED")
 
 Frame:Hide()
 
@@ -489,6 +490,42 @@ function Frame:CreateFrame(self)
 	ShowAfterScanTXT:SetPoint("LEFT", ShowAfterScanCHK, "RIGHT", 5, 0)
 	ShowAfterScanTXT:SetText("Show log frame after bank scan")
 
+	local UseUnanchoredScanCHK = CreateFrame("CheckButton", Addon .. "UseUnanchoredScanCHK", CurrentScrollContent, "OptionsBaseCheckButtonTemplate")
+	UseUnanchoredScanCHK:SetScript("OnClick", function(self)
+		local dialog = StaticPopup_Show("PLG_ChangeScanBTN")
+		if dialog then
+			dialog.data  = self
+		end
+	end)
+	UseUnanchoredScanCHK:SetScript("OnShow", function(self)
+		self:SetChecked(db.Settings.UseUnanchoredScan)
+	end)
+
+	UseUnanchoredScanCHK:SetPoint("TOPLEFT", ShowAfterScanCHK, "BOTTOMLEFT", 0, -5)
+	UseUnanchoredScanCHK:SetChecked(db.Settings.UseUnanchoredScan)
+
+	local UseUnanchoredScanTXT = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+	UseUnanchoredScanTXT:SetPoint("LEFT", UseUnanchoredScanCHK, "RIGHT", 5, 0)
+	UseUnanchoredScanTXT:SetText("Use un-anchored scan button")
+
+	local ResetScanBTN = CreateFrame("Button", Addon .. "ResetScanBTN", CurrentScrollContent, "UIPanelButtonTemplate")
+	ResetScanBTN:SetScript("OnClick", function(self)
+		db.Settings.UnanchoredScanPosition = {"CENTER", 0, 0}
+		if Frame.ScanBTN then
+			Frame.ScanDrag:ClearAllPoints()
+			Frame.ScanDrag:SetPoint("CENTER", 0, 0)
+		end
+	end)
+
+	ResetScanBTN:SetSize(160, 21)
+	ResetScanBTN:SetPoint("TOPLEFT", UseUnanchoredScanTXT, "BOTTOMLEFT", 0, -10)
+
+	ResetScanBTN:SetText("Reset Scan Button Position")
+	
+	if not db.Settings.UseUnanchoredScan then
+		ResetScanBTN:Disable()
+	end
+
 -- ///////////////////////////////////////////////////////////////////////////////////////////////////////// --
 
 	CurrentScrollContent = self.ScrollContentFrames["HelpTab"]
@@ -505,6 +542,56 @@ function Frame:CreateFrame(self)
 	HelpMsg:SetText("If you need assistance with the addon, please leave a comment on Curse/WoW Interface or email me at addons@niketa.net.")
 	HelpMsg:SetJustifyH("LEFT")
 	HelpMsg:SetWordWrap(true)
+
+	Header2 = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+	Header2:SetPoint("TOPLEFT", HelpMsg, "BOTTOMLEFT", 0, -10)
+
+	Header2:SetText("Common Issues")
+
+	local LINE1 = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+	LINE1:SetWidth(CurrentScrollContent:GetWidth() - 20)
+	LINE1:SetPoint("TOPLEFT", Header2, "BOTTOMLEFT", 0, -5)
+
+	LINE1:SetText("If the scan button shows up on your screen while away from the guild bank, a UI reload should get rid of it. Please report what you were doing when it happened to help troubleshoot.")
+	LINE1:SetJustifyH("LEFT")
+	LINE1:SetWordWrap(true)
+
+	local LINE2 = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+	LINE2:SetWidth(CurrentScrollContent:GetWidth() - 20)
+	LINE2:SetPoint("TOPLEFT", LINE1, "BOTTOMLEFT", 0, -10)
+
+	LINE2:SetText("If you have an incomplete scan (usually upon first logging in), simply delete the scan and try again. Usually when this is happening, it's because there wasn't enough time to query the bank log. The second scan should be complete.")
+	LINE2:SetJustifyH("LEFT")
+	LINE2:SetWordWrap(true)
+
+	local LINE3 = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+	LINE3:SetWidth(CurrentScrollContent:GetWidth() - 20)
+	LINE3:SetPoint("TOPLEFT", LINE2, "BOTTOMLEFT", 0, -10)
+
+	LINE3:SetText("If you are using an unsupported bank addon, you will have an un-anchored scan button. However, if the button does not properly produce the log, please report what addon it is, any lua errors and how it reacts.")
+	LINE3:SetJustifyH("LEFT")
+	LINE3:SetWordWrap(true)
+
+	Header3 = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+	Header3:SetPoint("TOPLEFT", LINE3, "BOTTOMLEFT", 0, -10)
+
+	Header3:SetText("Future Plans")
+
+	local LINE4 = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+	LINE4:SetWidth(CurrentScrollContent:GetWidth() - 20)
+	LINE4:SetPoint("TOPLEFT", Header3, "BOTTOMLEFT", 0, -5)
+
+	LINE4:SetText("Filter by names/player overview")
+	LINE4:SetJustifyH("LEFT")
+	LINE4:SetWordWrap(true)
+
+	local LINE5 = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+	LINE5:SetWidth(CurrentScrollContent:GetWidth() - 20)
+	LINE5:SetPoint("TOPLEFT", LINE4, "BOTTOMLEFT", 0, -5)
+
+	LINE5:SetText("Full log export")
+	LINE5:SetJustifyH("LEFT")
+	LINE5:SetWordWrap(true)
 
 
 -- ///////////////////////////////////////////////////////////////////////////////////////////////////////// --
@@ -749,42 +836,101 @@ end
 
 -- /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// --
 
+function Frame:GUILDBANKFRAME_CLOSED(...)
+	db.Settings.UnanchoredScanPosition = {Frame.ScanDrag:GetPoint()}
+	Frame.ScanDrag:Hide()
+end
+
+-- /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
 local first = true
 
-function Frame:GUILDBANKBAGSLOTS_CHANGED(...)
-	if (has_bagnon and not BagnonFrameguildbank:IsVisible()) or not GuildBankFrame:IsVisible() or Frame.ScanBTN then
+function Frame:GUILDBANKFRAME_OPENED(...)
+	if Frame.ScanBTN then
+		if db.Settings.UseUnanchoredScan or ((not GuildBankFrame or not GuildBankFrame:IsVisible()) and not has_bagnon) then
+			Frame.ScanDrag:Show()
+		end
 		return
 	end
 
-	local parent = has_bagnon and (BagnonFrameguildbank.brokerDisplay or BagnonFrameguildbank) or GuildBankFrame
-	local point = has_bagnon and {"CENTER", BagnonFrameguildbank, "BOTTOM", 0, 17} or {"BOTTOMLEFT", GuildBankFrame, "BOTTOMLEFT", 11, 31}
+	local ScanBTN
 
-	local ScanBTN = CreateFrame("Button", Addon .. "ScanBTN", parent, "UIPanelButtonTemplate")
-	ScanBTN:SetScript("OnClick", function(self)
-		Frame:Print("Starting scan...")
-		self:Disable()
-
-		for i = 1, MAX_GUILDBANK_TABS + 1 do
-			QueryGuildBankLog(i)
+	if db.Settings.UseUnanchoredScan or ((not GuildBankFrame or not GuildBankFrame:IsVisible()) and not has_bagnon) then
+		if not db.Settings.UseUnanchoredScan then
+			Frame:Print("It appears that you are not using a supported guild bank addon, so you will have to use the un-anchored scan button. To stop seeing this message, select to use this button as default under the settings tab. If you are seeing this (and the scan button is made) and you are not at the guild bank, please report as much information as possible on the Curse or WoW Interface comments.")
 		end
 
-		if first then
-			C_Timer.After(2, Frame.ScanLogs)
-			first = nil
-		else
-			C_Timer.After(1, Frame.ScanLogs)
-		end
-	end)
+		local point = db.Settings.UnanchoredScanPosition
 
-	ScanBTN:SetToplevel(has_bagnon)
-	ScanBTN:SetSize(100, 21)
-	ScanBTN:SetPoint(point[1], point[2], point[3], point[4], point[5])
+		local ScanDrag = CreateFrame("Frame", Addon .. "ScanDrag", UIParent)
+		ScanDrag:SetPoint(point[1], point[2], point[3], point[4], point[5])
+		ScanDrag:SetSize(130, 22)
 
-	ScanBTN:SetText("Scan Bank")
+		ScanDrag:EnableMouse(true)
+		ScanDrag:SetMovable(true)
+		ScanDrag:SetToplevel(true)
+
+		ScanDrag.texture = ScanDrag:CreateTexture(nil, "BACKGROUND")
+		ScanDrag.texture:SetAllPoints(ScanDrag)
+		ScanDrag.texture:SetTexture(0, 0, 0, 0.5)
+
+		ScanDrag.title_region = ScanDrag:CreateTitleRegion()
+		ScanDrag.title_region:SetAllPoints(ScanDrag)
+
+		ScanBTN = CreateFrame("Button", Addon .. "ScanBTN", ScanDrag, "UIPanelButtonTemplate")
+		ScanBTN:SetScript("OnClick", function(self)
+			Frame:Print("Starting scan...")
+			self:Disable()
+
+			for i = 1, MAX_GUILDBANK_TABS + 1 do
+				QueryGuildBankLog(i)
+			end
+
+			if first then
+				C_Timer.After(2, Frame.ScanLogs)
+				first = nil
+			else
+				C_Timer.After(1, Frame.ScanLogs)
+			end
+		end)
+
+		ScanBTN:SetSize(100, 21)
+		ScanBTN:SetPoint("TOPRIGHT", ScanDrag, "TOPRIGHT", 0, 0)
+
+		ScanBTN:SetText("Scan Bank")
+
+		Frame.ScanDrag = ScanDrag
+
+		Frame:RegisterEvent("GUILDBANKFRAME_CLOSED")
+	else
+		local parent = has_bagnon and (BagnonFrameguildbank.brokerDisplay or BagnonFrameguildbank) or GuildBankFrame
+		local point = has_bagnon and {"CENTER", BagnonFrameguildbank, "BOTTOM", 0, 17} or {"BOTTOMLEFT", GuildBankFrame, "BOTTOMLEFT", 11, 31}
+
+		ScanBTN = CreateFrame("Button", Addon .. "ScanBTN", parent, "UIPanelButtonTemplate")
+		ScanBTN:SetScript("OnClick", function(self)
+			Frame:Print("Starting scan...")
+			self:Disable()
+
+			for i = 1, MAX_GUILDBANK_TABS + 1 do
+				QueryGuildBankLog(i)
+			end
+
+			if first then
+				C_Timer.After(2, Frame.ScanLogs)
+				first = nil
+			else
+				C_Timer.After(1, Frame.ScanLogs)
+			end
+		end)
+
+		ScanBTN:SetToplevel(has_bagnon)
+		ScanBTN:SetSize(100, 21)
+		ScanBTN:SetPoint(point[1], point[2], point[3], point[4], point[5])
+
+		ScanBTN:SetText("Scan Bank")
+	end
 
 	Frame.ScanBTN = ScanBTN
-
-	Frame:UnregisterEvent("GUILDBANKBAGSLOTS_CHANGED")
 end
 
 -- /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// --
@@ -1027,6 +1173,24 @@ function Frame:SetLog(guild, log)
 end
 
 -- /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
+StaticPopupDialogs["PLG_ChangeScanBTN"] = {
+	text = "Changing this setting requires a UI reload. Would you like to continue?",
+	button1 = "Yes",
+	button2 = "No",
+	OnAccept = function(self, data)
+		db.Settings.UseUnanchoredScan = data:GetChecked()
+		if Frame.ScanDrag then
+			db.Settings.UnanchoredScanPosition = {Frame.ScanDrag:GetPoint()}
+		end
+		ReloadUI()
+	end,
+	OnCancel = function(self, data)
+		data:SetChecked(db.Settings.UseUnanchoredScan)
+	end,
+	whileDead = true,
+	hideOnEscape = true
+}
 
 StaticPopupDialogs["PLG_DeleteAllConfirmation"] = {
 	text = "Are you sure you want to delete all logs?",
