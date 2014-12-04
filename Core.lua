@@ -10,7 +10,7 @@ Frame:SetScript("OnEvent", function(self, event, ...)
 end)
 
 Frame:RegisterEvent("ADDON_LOADED")
--- Frame:RegisterEvent("GUILDBANKBAGSLOTS_CHANGED")
+Frame:RegisterEvent("GUILDBANKFRAME_CLOSED")
 Frame:RegisterEvent("GUILDBANKFRAME_OPENED")
 
 Frame:Hide()
@@ -543,7 +543,7 @@ function Frame:CreateFrame(self)
 	HelpMsg:SetJustifyH("LEFT")
 	HelpMsg:SetWordWrap(true)
 
-	Header2 = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+	local Header2 = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 	Header2:SetPoint("TOPLEFT", HelpMsg, "BOTTOMLEFT", 0, -10)
 
 	Header2:SetText("Common Issues")
@@ -572,7 +572,7 @@ function Frame:CreateFrame(self)
 	LINE3:SetJustifyH("LEFT")
 	LINE3:SetWordWrap(true)
 
-	Header3 = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+	local Header3 = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 	Header3:SetPoint("TOPLEFT", LINE3, "BOTTOMLEFT", 0, -10)
 
 	Header3:SetText("Future Plans")
@@ -592,6 +592,35 @@ function Frame:CreateFrame(self)
 	LINE5:SetText("Full log export")
 	LINE5:SetJustifyH("LEFT")
 	LINE5:SetWordWrap(true)
+
+	local LINE6 = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+	LINE6:SetWidth(CurrentScrollContent:GetWidth() - 20)
+	LINE6:SetPoint("TOPLEFT", LINE5, "BOTTOMLEFT", 0, -5)
+
+	LINE6:SetText("Hide button option")
+	LINE6:SetJustifyH("LEFT")
+	LINE6:SetWordWrap(true)
+
+	local Header4 = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+	Header4:SetPoint("TOPLEFT", LINE6, "BOTTOMLEFT", 0, -10)
+
+	Header4:SetText("Slash Commands")
+
+	local LINE7 = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+	LINE7:SetWidth(CurrentScrollContent:GetWidth() - 20)
+	LINE7:SetPoint("TOPLEFT", Header4, "BOTTOMLEFT", 0, -5)
+
+	LINE7:SetText("/plg = Opens main addon frame")
+	LINE7:SetJustifyH("LEFT")
+	LINE7:SetWordWrap(true)
+
+	local LINE8 = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+	LINE8:SetWidth(CurrentScrollContent:GetWidth() - 20)
+	LINE8:SetPoint("TOPLEFT", LINE7, "BOTTOMLEFT", 0, -5)
+
+	LINE8:SetText("/plg scan = Scans guild bank to create log (same function as using the button)")
+	LINE8:SetJustifyH("LEFT")
+	LINE8:SetWordWrap(true)
 
 
 -- ///////////////////////////////////////////////////////////////////////////////////////////////////////// --
@@ -836,9 +865,15 @@ end
 
 -- /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// --
 
+local frame_opened
+
 function Frame:GUILDBANKFRAME_CLOSED(...)
-	db.Settings.UnanchoredScanPosition = {Frame.ScanDrag:GetPoint()}
-	Frame.ScanDrag:Hide()
+	frame_opened = false
+
+	if db.Settings.UseUnanchoredScan then
+		db.Settings.UnanchoredScanPosition = {Frame.ScanDrag:GetPoint()}
+		Frame.ScanDrag:Hide()
+	end
 end
 
 -- /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// --
@@ -846,6 +881,8 @@ end
 local first = true
 
 function Frame:GUILDBANKFRAME_OPENED(...)
+	frame_opened = true
+
 	if Frame.ScanBTN then
 		if db.Settings.UseUnanchoredScan or ((not GuildBankFrame or not GuildBankFrame:IsVisible()) and not has_bagnon) then
 			Frame.ScanDrag:Show()
@@ -878,21 +915,7 @@ function Frame:GUILDBANKFRAME_OPENED(...)
 		ScanDrag.title_region:SetAllPoints(ScanDrag)
 
 		ScanBTN = CreateFrame("Button", Addon .. "ScanBTN", ScanDrag, "UIPanelButtonTemplate")
-		ScanBTN:SetScript("OnClick", function(self)
-			Frame:Print("Starting scan...")
-			self:Disable()
-
-			for i = 1, MAX_GUILDBANK_TABS + 1 do
-				QueryGuildBankLog(i)
-			end
-
-			if first then
-				C_Timer.After(2, Frame.ScanLogs)
-				first = nil
-			else
-				C_Timer.After(1, Frame.ScanLogs)
-			end
-		end)
+		ScanBTN:SetScript("OnClick", Frame.ScanFunction)
 
 		ScanBTN:SetSize(100, 21)
 		ScanBTN:SetPoint("TOPRIGHT", ScanDrag, "TOPRIGHT", 0, 0)
@@ -900,8 +923,6 @@ function Frame:GUILDBANKFRAME_OPENED(...)
 		ScanBTN:SetText("Scan Bank")
 
 		Frame.ScanDrag = ScanDrag
-
-		Frame:RegisterEvent("GUILDBANKFRAME_CLOSED")
 	else
 		local parent = has_bagnon and (BagnonFrameguildbank.brokerDisplay or BagnonFrameguildbank) or GuildBankFrame
 		local point = has_bagnon and {"CENTER", BagnonFrameguildbank, "BOTTOM", 0, 17} or {"BOTTOMLEFT", GuildBankFrame, "BOTTOMLEFT", 11, 31}
@@ -1047,6 +1068,29 @@ function Frame:RefreshButtons()
 		UIDropDownMenu_DisableDropDown(Frame.LogDROP)
 	else
 		UIDropDownMenu_EnableDropDown(Frame.LogDROP)
+	end
+end
+
+-- /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// --
+
+function Frame:ScanFunction()
+	if not frame_opened then
+		Frame:Print("You must be at the guild bank to use the scan feature.")
+		return
+	end
+
+	Frame:Print("Starting scan...")
+	Frame.ScanBTN:Disable()
+
+	for i = 1, MAX_GUILDBANK_TABS + 1 do
+		QueryGuildBankLog(i)
+	end
+
+	if first then
+		C_Timer.After(2, Frame.ScanLogs)
+		first = nil
+	else
+		C_Timer.After(1, Frame.ScanLogs)
 	end
 end
 
@@ -1232,5 +1276,9 @@ StaticPopupDialogs["PLG_DeleteConfirmation"] = {
 SLASH_PROLOGGUILD1 = "/plg"
 
 function SlashCmdList.PROLOGGUILD(msg)
-	Frame:CreateFrame(Frame)
+	if msg == "scan" then
+		Frame:ScanFunction()
+	else
+		Frame:CreateFrame(Frame)
+	end
 end
