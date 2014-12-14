@@ -517,7 +517,7 @@ function Frame:CreateFrame(self)
 		end
 	end)
 
-	ResetScanBTN:SetSize(160, 21)
+	ResetScanBTN:SetSize(200, 21)
 	ResetScanBTN:SetPoint("TOPLEFT", UseUnanchoredScanTXT, "BOTTOMLEFT", 0, -10)
 
 	ResetScanBTN:SetText("Reset Scan Button Position")
@@ -526,102 +526,62 @@ function Frame:CreateFrame(self)
 		ResetScanBTN:Disable()
 	end
 
+	local HideButtonCHK = CreateFrame("CheckButton", Addon .. "HideButtonCHK", CurrentScrollContent, "OptionsBaseCheckButtonTemplate")
+	HideButtonCHK:SetScript("OnClick", function(self)
+		local dialog = StaticPopup_Show("PLG_HideScanBTN")
+		if dialog then
+			dialog.data  = self
+		end
+	end)
+	HideButtonCHK:SetScript("OnShow", function(self)
+		self:SetChecked(db.Settings.HideButton)
+	end)
+
+	HideButtonCHK:SetPoint("TOPLEFT", UseUnanchoredScanCHK, "BOTTOMLEFT", 0, -30)
+	HideButtonCHK:SetChecked(db.Settings.HideButton)
+
+	local HideButtonTXT = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+	HideButtonTXT:SetPoint("LEFT", HideButtonCHK, "RIGHT", 5, 0)
+	HideButtonTXT:SetText("Hide scan button")
+
+
 -- ///////////////////////////////////////////////////////////////////////////////////////////////////////// --
 
 	CurrentScrollContent = self.ScrollContentFrames["HelpTab"]
+
+	local strings = {
+		{"If you need assistance with the addon, please leave a comment on Curse/WoW Interface or email me at addons@niketa.net.", false},
+		{"Common Issues", true},
+		{"If the scan button shows up on your screen while away from the guild bank, a UI reload should get rid of it. Please report what you were doing when it happened to help troubleshoot.", false},
+		{"If you have an incomplete scan (usually upon first logging in), simply delete the scan and try again. Usually when this is happening, it's because there wasn't enough time to query the bank log. The second scan should be complete.", false},
+		{"If you are using an unsupported bank addon, you will have an un-anchored scan button. However, if the button does not properly produce the log, please report what addon it is, any lua errors and how it reacts.", false},
+		{"Future Plans", true},
+		{"Filter by names/player overview", false},
+		{"Full log export", false},
+		{"Slash Commands", true},
+		{"/plg = Opens main addon frame", false},
+		{"/plg scan = Scans guild bank to create log (same function as using the button)", false}
+	}
+
+	local lines = {}
 
 	Header = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 	Header:SetPoint("TOPLEFT", 10, -10)
 
 	Header:SetText("Help")
 
-	local HelpMsg = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-	HelpMsg:SetWidth(CurrentScrollContent:GetWidth() - 20)
-	HelpMsg:SetPoint("TOPLEFT", Header, "BOTTOMLEFT", 0, -5)
+	i = 1
+	for k, v in pairs(strings) do
+		lines[i] = CurrentScrollContent:CreateFontString(nil, "OVERLAY", v[2] and "GameFontNormalLarge" or "GameFontHighlight")
+		lines[i]:SetWidth(CurrentScrollContent:GetWidth() - 20)
+		lines[i]:SetPoint("TOPLEFT", i > 1 and lines[i - 1] or Header, "BOTTOMLEFT", 0, v[2] and -10 or -5)
 
-	HelpMsg:SetText("If you need assistance with the addon, please leave a comment on Curse/WoW Interface or email me at addons@niketa.net.")
-	HelpMsg:SetJustifyH("LEFT")
-	HelpMsg:SetWordWrap(true)
+		lines[i]:SetText(v[1])
+		lines[i]:SetJustifyH("LEFT")
+		lines[i]:SetWordWrap(true)
 
-	local Header2 = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-	Header2:SetPoint("TOPLEFT", HelpMsg, "BOTTOMLEFT", 0, -10)
-
-	Header2:SetText("Common Issues")
-
-	local LINE1 = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-	LINE1:SetWidth(CurrentScrollContent:GetWidth() - 20)
-	LINE1:SetPoint("TOPLEFT", Header2, "BOTTOMLEFT", 0, -5)
-
-	LINE1:SetText("If the scan button shows up on your screen while away from the guild bank, a UI reload should get rid of it. Please report what you were doing when it happened to help troubleshoot.")
-	LINE1:SetJustifyH("LEFT")
-	LINE1:SetWordWrap(true)
-
-	local LINE2 = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-	LINE2:SetWidth(CurrentScrollContent:GetWidth() - 20)
-	LINE2:SetPoint("TOPLEFT", LINE1, "BOTTOMLEFT", 0, -10)
-
-	LINE2:SetText("If you have an incomplete scan (usually upon first logging in), simply delete the scan and try again. Usually when this is happening, it's because there wasn't enough time to query the bank log. The second scan should be complete.")
-	LINE2:SetJustifyH("LEFT")
-	LINE2:SetWordWrap(true)
-
-	local LINE3 = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-	LINE3:SetWidth(CurrentScrollContent:GetWidth() - 20)
-	LINE3:SetPoint("TOPLEFT", LINE2, "BOTTOMLEFT", 0, -10)
-
-	LINE3:SetText("If you are using an unsupported bank addon, you will have an un-anchored scan button. However, if the button does not properly produce the log, please report what addon it is, any lua errors and how it reacts.")
-	LINE3:SetJustifyH("LEFT")
-	LINE3:SetWordWrap(true)
-
-	local Header3 = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-	Header3:SetPoint("TOPLEFT", LINE3, "BOTTOMLEFT", 0, -10)
-
-	Header3:SetText("Future Plans")
-
-	local LINE4 = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-	LINE4:SetWidth(CurrentScrollContent:GetWidth() - 20)
-	LINE4:SetPoint("TOPLEFT", Header3, "BOTTOMLEFT", 0, -5)
-
-	LINE4:SetText("Filter by names/player overview")
-	LINE4:SetJustifyH("LEFT")
-	LINE4:SetWordWrap(true)
-
-	local LINE5 = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-	LINE5:SetWidth(CurrentScrollContent:GetWidth() - 20)
-	LINE5:SetPoint("TOPLEFT", LINE4, "BOTTOMLEFT", 0, -5)
-
-	LINE5:SetText("Full log export")
-	LINE5:SetJustifyH("LEFT")
-	LINE5:SetWordWrap(true)
-
-	local LINE6 = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-	LINE6:SetWidth(CurrentScrollContent:GetWidth() - 20)
-	LINE6:SetPoint("TOPLEFT", LINE5, "BOTTOMLEFT", 0, -5)
-
-	LINE6:SetText("Hide button option")
-	LINE6:SetJustifyH("LEFT")
-	LINE6:SetWordWrap(true)
-
-	local Header4 = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-	Header4:SetPoint("TOPLEFT", LINE6, "BOTTOMLEFT", 0, -10)
-
-	Header4:SetText("Slash Commands")
-
-	local LINE7 = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-	LINE7:SetWidth(CurrentScrollContent:GetWidth() - 20)
-	LINE7:SetPoint("TOPLEFT", Header4, "BOTTOMLEFT", 0, -5)
-
-	LINE7:SetText("/plg = Opens main addon frame")
-	LINE7:SetJustifyH("LEFT")
-	LINE7:SetWordWrap(true)
-
-	local LINE8 = CurrentScrollContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-	LINE8:SetWidth(CurrentScrollContent:GetWidth() - 20)
-	LINE8:SetPoint("TOPLEFT", LINE7, "BOTTOMLEFT", 0, -5)
-
-	LINE8:SetText("/plg scan = Scans guild bank to create log (same function as using the button)")
-	LINE8:SetJustifyH("LEFT")
-	LINE8:SetWordWrap(true)
-
+		i = i + 1
+	end
 
 -- ///////////////////////////////////////////////////////////////////////////////////////////////////////// --
 
@@ -870,6 +830,10 @@ local frame_opened
 function Frame:GUILDBANKFRAME_CLOSED(...)
 	frame_opened = false
 
+	if db.Settings.HideButton then
+		return
+	end
+
 	if db.Settings.UseUnanchoredScan then
 		db.Settings.UnanchoredScanPosition = {Frame.ScanDrag:GetPoint()}
 		Frame.ScanDrag:Hide()
@@ -882,6 +846,10 @@ local first = true
 
 function Frame:GUILDBANKFRAME_OPENED(...)
 	frame_opened = true
+
+	if db.Settings.HideButton then
+		return
+	end
 
 	if Frame.ScanBTN then
 		if db.Settings.UseUnanchoredScan or ((not GuildBankFrame or not GuildBankFrame:IsVisible()) and not has_bagnon) then
@@ -929,19 +897,7 @@ function Frame:GUILDBANKFRAME_OPENED(...)
 
 		ScanBTN = CreateFrame("Button", Addon .. "ScanBTN", parent, "UIPanelButtonTemplate")
 		ScanBTN:SetScript("OnClick", function(self)
-			Frame:Print("Starting scan...")
-			self:Disable()
-
-			for i = 1, MAX_GUILDBANK_TABS + 1 do
-				QueryGuildBankLog(i)
-			end
-
-			if first then
-				C_Timer.After(2, Frame.ScanLogs)
-				first = nil
-			else
-				C_Timer.After(1, Frame.ScanLogs)
-			end
+			Frame:ScanFunction()
 		end)
 
 		ScanBTN:SetToplevel(has_bagnon)
@@ -1080,14 +1036,17 @@ function Frame:ScanFunction()
 	end
 
 	Frame:Print("Starting scan...")
-	Frame.ScanBTN:Disable()
+	if not db.Settings.HideButton then
+		Frame.ScanBTN:Disable()
+	end
 
 	for i = 1, MAX_GUILDBANK_TABS + 1 do
 		QueryGuildBankLog(i)
 	end
 
 	if first then
-		C_Timer.After(2, Frame.ScanLogs)
+		C_Timer.After(5, Frame.ScanLogs)
+		Frame:Print("Please wait... Your first scan will take longer than usual.")
 		first = nil
 	else
 		C_Timer.After(1, Frame.ScanLogs)
@@ -1140,7 +1099,9 @@ function Frame:ScanLogs()
 		end
 	end
 
-	Frame.ScanBTN:Enable()
+	if not db.Settings.HideButton then
+		Frame.ScanBTN:Enable()
+	end
 	Frame:Print("Scan finished!")
 
 	if db.Settings.ShowAfterScan then
@@ -1266,6 +1227,21 @@ StaticPopupDialogs["PLG_DeleteConfirmation"] = {
 
 		Frame:SetLog("CLEARCODE")
 		Frame:RefreshButtons()
+	end,
+	whileDead = true,
+	hideOnEscape = true
+}
+
+StaticPopupDialogs["PLG_HideScanBTN"] = {
+	text = "Changing this setting requires a UI reload. Would you like to continue?",
+	button1 = "Yes",
+	button2 = "No",
+	OnAccept = function(self, data)
+		db.Settings.HideButton = data:GetChecked()
+		ReloadUI()
+	end,
+	OnCancel = function(self, data)
+		data:SetChecked(db.Settings.HideButton)
 	end,
 	whileDead = true,
 	hideOnEscape = true

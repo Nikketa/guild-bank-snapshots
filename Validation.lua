@@ -11,7 +11,7 @@ local default = {
         ShowAfterScan = true
     },
     Transactions = {},
-    Version = 3
+    Version = 4
 }
 
 function Frame:ValidateDB()
@@ -112,5 +112,12 @@ function Frame:ValidateDB()
 
             ProLogGuildDB.Version = 3
         end
+        if db.Version == 3 then
+            if not db.Settings.HideButton then
+                ProLogGuildDB.Settings.HideButton = false
+            end
+
+            ProLogGuildDB.Version = 4
+        end        
     end
 end
