@@ -6,4 +6,6 @@
 ## SavedVariables: ProLogGuildDB
 
 Core.lua
+Options.lua
+Scan.lua
 Validation.lua
