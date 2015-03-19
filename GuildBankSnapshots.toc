@@ -1,0 +1,11 @@
+## Interface: 60100
+## Title: Guild Bank Snapshots
+## Notes: Creates snapshots of guild bank logs.
+## Author: Niketa
+## Version: @project-version@
+## SavedVariables: GuildBankSnapshotsDB
+
+Core.lua
+Options.lua
+Scan.lua
+Validation.lua
