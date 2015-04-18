@@ -1,7 +1,7 @@
 local Addon, ns = ...
 
 local db = setmetatable({}, {__index = function(t, k)
-    return _G["ProLogGuildDB"][k]
+    return _G["GuildBankSnapshotsDB"][k]
 end})
 
 local Frame = CreateFrame("Frame", Addon .. "Frame", UIParent)
@@ -177,9 +177,9 @@ end
 
 -- /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// --
 
-SLASH_PROLOGGUILD1 = "/plg"
+SLASH_GUILDBANKSNAPSHOTS1 , SLASH_GUILDBANKSNAPSHOTS2= "/gbs", "/plg"
 
-function SlashCmdList.PROLOGGUILD(msg)
+function SlashCmdList.GUILDBANKSNAPSHOTS(msg)
 	if msg == "scan" then
 		Frame:ScanBank()
 	else

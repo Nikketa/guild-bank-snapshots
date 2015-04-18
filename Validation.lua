@@ -8,15 +8,23 @@ local default = {
     ActivePage = false,
     ActiveTab = false,
     Settings = {
-        ShowAfterScan = true
+        ShowAfterScan = true,
+        UseUnanchoredScan = false,
+        UnanchoredScanPosition = {"CENTER", 0, 0},
+        HideButton = false
     },
     Transactions = {},
     Version = 4
 }
 
 function Frame:ValidateDB()
-    if not ProLogGuildDB then
-        ProLogGuildDB = default
+    if not GuildBankSnapshotsDB then
+        if ProLogGuildDB then
+            GuildBankSnapshotsDB = ProLogGuildDB
+            ProLogGuildDB = nil
+        else
+            GuildBankSnapshotsDB = default
+        end
     else
         if not db.Version then
             -- "Version 1"
@@ -29,20 +37,20 @@ function Frame:ValidateDB()
             -- Transactions["GUILDNAME"]["DATETIMELOG"]["money_transactions"]
             -- Transactions["GUILDNAME"]["DATETIMELOG"]["transactions"]["Tab n"]
 
-            ProLogGuildDB.Active = nil
-            ProLogGuildDB.log_dropdown = nil
-            ProLogGuildDB.Settings = {
+            GuildBankSnapshotsDB.Active = nil
+            GuildBankSnapshotsDB.log_dropdown = nil
+            GuildBankSnapshotsDB.Settings = {
                 ShowAfterScan = true
             }
 
-            ProLogGuildDB.ActiveGuild = false
-            ProLogGuildDB.ActiveLog = false
-            ProLogGuildDB.ActivePage = false
-            ProLogGuildDB.ActiveTab = false
-            ProLogGuildDB.Version = 2
+            GuildBankSnapshotsDB.ActiveGuild = false
+            GuildBankSnapshotsDB.ActiveLog = false
+            GuildBankSnapshotsDB.ActivePage = false
+            GuildBankSnapshotsDB.ActiveTab = false
+            GuildBankSnapshotsDB.Version = 2
 
             local Temp = {}
-            for k, v in pairs(ProLogGuildDB.Transactions) do
+            for k, v in pairs(GuildBankSnapshotsDB.Transactions) do
                 Temp[k] = {}
 
                 for a, b in pairs(v) do
@@ -100,24 +108,24 @@ function Frame:ValidateDB()
                 end
             end
 
-            ProLogGuildDB.Transactions = Temp
+            GuildBankSnapshotsDB.Transactions = Temp
         end
         if db.Version == 2 then
             if not db.Settings.UseUnanchoredScan then
-                ProLogGuildDB.Settings.UseUnanchoredScan = false
+                GuildBankSnapshotsDB.Settings.UseUnanchoredScan = false
             end
             if not db.Settings.UnanchoredScanPosition then
-                ProLogGuildDB.Settings.UnanchoredScanPosition = {"CENTER", 0, 0}
+                GuildBankSnapshotsDB.Settings.UnanchoredScanPosition = {"CENTER", 0, 0}
             end
 
-            ProLogGuildDB.Version = 3
+            GuildBankSnapshotsDB.Version = 3
         end
         if db.Version == 3 then
             if not db.Settings.HideButton then
-                ProLogGuildDB.Settings.HideButton = false
+                GuildBankSnapshotsDB.Settings.HideButton = false
             end
 
-            ProLogGuildDB.Version = 4
+            GuildBankSnapshotsDB.Version = 4
         end        
     end
 end

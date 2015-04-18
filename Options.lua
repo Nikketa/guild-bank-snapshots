@@ -76,7 +76,7 @@ function Frame:CreateFrame()
     TitleRegion:SetSize(self:GetWidth(), 45)
 
     local TitleTXT = self:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    TitleTXT:SetText("PLG (Pro-Log Guild)")
+    TitleTXT:SetText("Guild Bank Snapshots (Formerly Pro-Log Guild)")
     TitleTXT:SetPoint("TOPLEFT", 85, -18)
 
 -- ///////////////////////////////////////////////////////////////////////////////////////////////////////// --
@@ -413,13 +413,16 @@ function Frame:CreateFrame()
     HideButtonTXT:SetPoint("LEFT", HideButtonCHK, "RIGHT", 5, 0)
     HideButtonTXT:SetText("Hide scan button")
 
-
 -- ///////////////////////////////////////////////////////////////////////////////////////////////////////// --
 
     CurrentScrollContent = self.ScrollContentFrames["HelpTab"]
 
     local strings = {
         {"If you need assistance with the addon, please leave a comment on Curse/WoW Interface or email me at addons@niketa.net.", false},
+        {"NAME CHANGE", true},
+        {"Pro-Log Guild has gone under a name change and is now named Guild Bank Snapshots. I apologize if it causes any issues or confusion, but I feel that the new addon name will more accurately describe the description of the addon. It is also a precursor to a rewrite that I plan to work on that will hopefully improve the functionality and speed of the addon. For now, I will leave in the checks to ensure you are able to transfer your PLG data to the new name, but after some time these checks will be removed. Similarly, you will still be able to use \"/plg\" but this will eventually be removed as well.", false},
+        {"Copying your PLG Database", true},
+        {"You will need to manually copy your Saved Variables to get your old data back. Please follow these instructions carefully. You may need to write these instructions down or check the Curse/WoW Interface descriptions as this process needs to be done with you logged out of the game. Close out WoW completely. Any changes made to Saved Variable files while WoW is still open may be overwritten. Once you have WoW closed out, navigate to your Saved Variables folder. Go to your WoW directory, then WTF, then Account, then click on the name of your account (or the account number) and then the folder Saved Variables (NOT the server folder). Find the file ProLogGuild.lua and open it. Find the file GuildBankSnapshots.lua and open this as well. Copy the entire contents of ProLogGuild.lua into GuildBankSnapshots.lua. You may save GuildBankSnapshots.lua here, however it is strongly suggested that you change where it says \"ProLogGuildDB\" at the beginning to \"GuildBankSnapshotsDB\". If you bypass these steps, when you log into the game, GBS will update the name for you. However, this step will be removed from the addon in the future and once that happens, your data will not correctly transfer. So, it will just be easiest if you make the update yourself. Finally, please keep in mind that this will completely overwrite your current, new GBS database. It's strongly recommended you take these steps before doing any new scans. I do not have any plans to write code to merge data because it would be time consuming and a waste of time. I apologize for the extra steps you have to take to take care of this.", false},
         {"Common Issues", true},
         {"If the scan button shows up on your screen while away from the guild bank, a UI reload should get rid of it. Please report what you were doing when it happened to help troubleshoot.", false},
         {"If you have an incomplete scan (usually upon first logging in), simply delete the scan and try again. Usually when this is happening, it's because there wasn't enough time to query the bank log. The second scan should be complete.", false},
@@ -430,8 +433,8 @@ function Frame:CreateFrame()
         {"Improved log export -- need to speed up export to export more at once", false},
         {"Option to choose the delay on intial scan (in case you need it to wait longer the first time to get an accurate scan)", false},
         {"Slash Commands", true},
-        {"/plg = Opens main addon frame", false},
-        {"/plg scan = Scans guild bank to create log (same function as using the button)", false}
+        {"/gbs = Opens main addon frame", false},
+        {"/gbs scan = Scans guild bank to create log (same function as using the button)", false}
     }
 
     local lines = {}
@@ -1094,4 +1097,3 @@ StaticPopupDialogs["PLG_HideScanBTN"] = {
     whileDead = true,
     hideOnEscape = true
 }
-

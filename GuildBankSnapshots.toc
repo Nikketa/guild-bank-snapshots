@@ -3,7 +3,7 @@
 ## Notes: Creates snapshots of guild bank logs.
 ## Author: Niketa
 ## Version: @project-version@
-## SavedVariables: GuildBankSnapshotsDB
+## SavedVariables: GuildBankSnapshotsDB, ProLogGuildDB
 
 Core.lua
 Options.lua
